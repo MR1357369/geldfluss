@@ -84,6 +84,18 @@ tr.tot td{font-weight:700;border-bottom:2px solid var(--ink)}
 .prow{display:grid;grid-template-columns:22px 1fr 1fr;gap:8px;align-items:center;margin-bottom:8px}
 .hint{color:var(--muted);font-size:13px}
 .hidden{display:none!important}
+.pcard input[type=text],.pcard input:not([type]){min-width:0;width:100%}
+.setup,.setup .panel{min-width:0;overflow:hidden}
+.pcard{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:6px 8px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;background:#fff}
+.pcard .psel{grid-column:2/4;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px;min-width:0}
+.pcard select{min-width:0;width:100%}
+.aichk{font-size:14px;white-space:nowrap;display:flex;align-items:center;gap:4px;cursor:pointer}
+.aichk input{width:18px;height:18px;min-height:0}
+.owners{position:absolute;top:2px;right:2px;display:flex;gap:1px}
+.tok.own{width:9px;height:9px;border-width:1px}
+.board.fastboard{background:linear-gradient(135deg,#f6e7b8,#e9c96b);padding:6px;border-radius:14px}
+.board.fastboard .center{background:#fffaf0}
+table.results td{padding:7px 4px;vertical-align:top}
 .cmini{width:80%;max-width:220px}
 .cmini .bar{height:8px;margin-top:3px}
 /* Touch & Mobil */
@@ -111,8 +123,9 @@ header{padding-top:calc(10px + env(safe-area-inset-top));padding-left:calc(16px 
   .sellrow{flex-wrap:wrap}
   .setup{margin:14px auto}
   .setup .panel{padding:16px}
-  .prow{grid-template-columns:18px 1fr;}
-  .prow select{grid-column:2}
+  .pcard .psel{grid-template-columns:minmax(0,1fr)}
+  .aichk .lbl{display:none}
+  .cell .lb{display:none}
 }
 @media(max-width:980px){
   main{padding-bottom:calc(78px + env(safe-area-inset-bottom))}
@@ -178,17 +191,31 @@ const SAVE_KEY = "geldfluss-v1";
 
 // ---------- Berufe (eigene Werte, monatlich) ----------
 const PROFS = [
-  {n:"Verkäufer:in",      salary:2800, tax:480,  wohnen:[750,0],      auto:[180,6000],  karte:[80,2500],  studium:[0,0],     sonst:700,  kind:220, savings:600},
-  {n:"Pflegefachkraft",   salary:3400, tax:650,  wohnen:[850,0],      auto:[220,8000],  karte:[90,3000],  studium:[0,0],     sonst:900,  kind:250, savings:800},
-  {n:"Elektriker:in",     salary:3600, tax:720,  wohnen:[880,0],      auto:[300,12000], karte:[110,3500], studium:[0,0],     sonst:900,  kind:260, savings:900},
-  {n:"Polizist:in",       salary:3900, tax:800,  wohnen:[900,0],      auto:[260,10000], karte:[90,3000],  studium:[0,0],     sonst:1000, kind:270, savings:1000},
-  {n:"Lehrkraft",         salary:4100, tax:900,  wohnen:[950,0],      auto:[250,9000],  karte:[100,3000], studium:[150,9000], sonst:950,  kind:280, savings:1200},
-  {n:"Bauleiter:in",      salary:5200, tax:1300, wohnen:[1100,190000],auto:[350,14000], karte:[120,4000], studium:[0,0],     sonst:1200, kind:350, savings:1500},
-  {n:"Ingenieur:in",      salary:6200, tax:1700, wohnen:[1300,230000],auto:[450,18000], karte:[150,5000], studium:[150,12000],sonst:1400, kind:400, savings:2000},
-  {n:"Ärzt:in",           salary:11000,tax:3600, wohnen:[2200,420000],auto:[700,30000], karte:[300,10000],studium:[600,60000],sonst:2200, kind:650, savings:3500},
+  {n:"Verkäufer:in",      salary:2800, tax:480,  wohnen:[750,0],      auto:[180,6000],  karte:[80,2500],  studium:[0,0],     sonst:700,  kind:120, savings:600},
+  {n:"Pflegefachkraft",   salary:3400, tax:650,  wohnen:[850,0],      auto:[220,8000],  karte:[90,3000],  studium:[0,0],     sonst:900,  kind:140, savings:800},
+  {n:"Elektriker:in",     salary:3600, tax:720,  wohnen:[880,0],      auto:[300,12000], karte:[110,3500], studium:[0,0],     sonst:900,  kind:140, savings:900},
+  {n:"Polizist:in",       salary:3900, tax:800,  wohnen:[900,0],      auto:[260,10000], karte:[90,3000],  studium:[0,0],     sonst:1000, kind:160, savings:1000},
+  {n:"Lehrkraft",         salary:4100, tax:900,  wohnen:[950,0],      auto:[250,9000],  karte:[100,3000], studium:[150,9000], sonst:950,  kind:170, savings:1200},
+  {n:"Bauleiter:in",      salary:5200, tax:1300, wohnen:[1100,190000],auto:[350,14000], karte:[120,4000], studium:[0,0],     sonst:1200, kind:220, savings:1500},
+  {n:"Ingenieur:in",      salary:6200, tax:1700, wohnen:[1300,230000],auto:[450,18000], karte:[150,5000], studium:[150,12000],sonst:1400, kind:220, savings:2000},
+  {n:"Ärzt:in",           salary:11000,tax:3600, wohnen:[2200,420000],auto:[700,30000], karte:[300,10000],studium:[600,60000],sonst:2200, kind:300, savings:3500},
 ];
 
-// ---------- Spielfeld ----------
+// ---------- Träume ----------
+const DREAMS = [
+  {n:"Weltreise mit der Familie", i:"🌍", cost:150000},
+  {n:"Segelyacht",                i:"⛵", cost:220000},
+  {n:"Haus am See",               i:"🏡", cost:300000},
+  {n:"Eigene Stiftung",           i:"🎗️", cost:250000},
+  {n:"Bildungsfonds für Kinder",  i:"🎓", cost:120000},
+  {n:"Eigenes Restaurant",        i:"🍽️", cost:200000},
+  {n:"Oldtimer-Sammlung",         i:"🚘", cost:180000},
+  {n:"Weingut in der Toskana",    i:"🍇", cost:350000},
+  {n:"Sabbatjahr auf Hawaii",     i:"🌺", cost:100000},
+  {n:"Tierheim gründen",          i:"🐾", cost:160000},
+];
+
+// ---------- Spielfeld Hamsterrad ----------
 const FT = {
   zahltag:   {l:"Zahltag",     i:"💶", c:"#2e7d32"},
   chance:    {l:"Gelegenheit", i:"💡", c:"#1565c0"},
@@ -198,9 +225,25 @@ const FT = {
   spende:    {l:"Spende",      i:"🤝", c:"#00838f"},
   kuendigung:{l:"Kündigung",   i:"📦", c:"#455a64"},
 };
-const BOARD = ["zahltag","chance","konsum","chance","markt","chance","kind","chance",
-               "zahltag","chance","konsum","chance","markt","chance","spende","chance",
-               "zahltag","chance","konsum","chance","markt","chance","kuendigung","chance"];
+const BOARD = ["zahltag","chance","konsum","chance","markt","chance",
+               "zahltag","chance","kind","chance","konsum","chance",
+               "zahltag","chance","markt","chance","spende","chance",
+               "zahltag","chance","konsum","chance","markt","kuendigung"];
+
+// ---------- Spielfeld Freiheitsbahn ----------
+const FTF = {
+  fzahltag:{l:"Geldfluss-Tag", i:"💰", c:"#2e7d32"},
+  invest:  {l:"Investition",   i:"🏗️", c:"#1565c0"},
+  traum:   {l:"Traum",         i:"🌟", c:"#a87800"},
+  risiko:  {l:"Risiko",        i:"⚡", c:"#c62828"},
+  wagnis:  {l:"Wagnis",        i:"🎯", c:"#6a1b9a"},
+  stiftung:{l:"Stiftung",      i:"🤝", c:"#00838f"},
+};
+const FAST = ["fzahltag","invest","traum","invest","risiko","traum",              "fzahltag","invest","wagnis","traum","invest","invest",              "fzahltag","invest","traum","invest","stiftung","risiko",              "fzahltag","invest","traum","invest","wagnis","traum"];
+const FAST_GOAL = 50000;   // Ziel B: Freiheits-Cashflow um diesen Betrag steigern
+const FAST_MULT = 10;      // Startwert Freiheits-Cashflow = passives Einkommen × 10
+const WAGNIS_COST = 25000, WAGNIS_WIN = 250000;
+
 function ringPos(i){ // 7x7 Rand
   if(i<=6) return [1, i+1];
   if(i<=12) return [i-5, 7];
@@ -208,7 +251,7 @@ function ringPos(i){ // 7x7 Rand
   return [7-(i-18), 1];
 }
 
-// ---------- Karten ----------
+// ---------- Karten Hamsterrad ----------
 const TICKERS = [
   {t:"NOVX", n:"Novix Software"}, {t:"GRNW", n:"Grünwerk Energie"},
   {t:"MDQ",  n:"Mediq Pharma"},   {t:"BSTF", n:"Baustoff Union"},
@@ -225,7 +268,7 @@ function smallDeal(){
     return {kind:"aktie", title:`Aktie: ${s.n} (${s.t})`, ticker:s.t, price, text:txt};
   }
   if(r<0.62){
-    const price = step(45000,85000,5000), down = Math.round(price*0.1/500)*500, cf = step(-50,300,50);
+    const price = step(45000,85000,5000), down = Math.round(price*0.1/500)*500, cf = step(-50,400,50);
     return {kind:"asset", cat:"wohnung", title:"Eigentumswohnung zu verkaufen",
       text: cf<0 ? "Günstig, aber die Miete deckt die Kosten nicht – eher eine Wette auf den Wiederverkauf." : "Vermietete 2-Zimmer-Wohnung in solider Lage.",
       name:"Eigentumswohnung", price, down, cf};
@@ -233,7 +276,7 @@ function smallDeal(){
   if(r<0.72){
     const price = step(12000,22000,1000);
     return {kind:"asset", cat:"garage", title:"Garagenhof-Stellplätze", text:"Zwei vermietete Garagen am Stadtrand.",
-      name:"Garagen", price, down:2000, cf:step(60,140,20)};
+      name:"Garagen", price, down:2000, cf:step(80,180,20)};
   }
   if(r<0.82){
     const price = step(2000,6000,1000);
@@ -242,7 +285,7 @@ function smallDeal(){
   }
   const b = pick([["Snackautomaten-Route","Fünf Automaten in Bürogebäuden."],["Online-Shop für Ersatzteile","Läuft nebenbei, kaum Aufwand."],["Fahrradverleih am See","Saisongeschäft mit treuer Kundschaft."],["Waschstraßen-Gutscheinvertrieb","Provision pro verkauftem Gutschein."]]);
   const price = step(2000,7000,500);
-  return {kind:"asset", cat:"klein", title:"Kleinunternehmen: "+b[0], text:b[1], name:b[0], price, down:price, cf:step(100,400,20)};
+  return {kind:"asset", cat:"klein", title:"Kleinunternehmen: "+b[0], text:b[1], name:b[0], price, down:price, cf:step(150,450,25)};
 }
 function bigDeal(){
   const r = Math.random();
@@ -266,7 +309,8 @@ function marketCard(){
   if(r<0.74) { const o = step(20000,35000,1000); return {kind:"offer", cat:"garage", title:"Nachbar will Garagen kaufen", text:`Angebot: ${eur(o)}.`, offer:()=>o}; }
   if(r<0.84) return {kind:"event", title:"Mietspiegel steigt", text:"Alle Eigentumswohnungen bringen dauerhaft +50 € Cashflow (alle Spieler).", ev:"miete"};
   if(r<0.92) return {kind:"event", title:"Heizungsschaden", text:"Wer gerade am Zug ist und ein Mehrfamilienhaus besitzt, zahlt 2.500 € Reparatur.", ev:"heizung"};
-  return {kind:"event", title:"Aktiensplit 2:1", text:`Die Aktie ${pick(TICKERS).t} wird gesplittet – alle Besitzer haben doppelt so viele Stücke.`, ev:"split"};
+  const t = pick(TICKERS).t;
+  return {kind:"event", title:"Aktiensplit 2:1", text:`Die Aktie ${t} wird gesplittet – alle Besitzer haben doppelt so viele Stücke.`, ev:"split", ticker:t};
 }
 const KONSUM = [
   ["Neues Smartphone",950],["Waschmaschine kaputt",650],["Spontanurlaub",2400],["Shopping-Wochenende",450],
@@ -275,13 +319,32 @@ const KONSUM = [
   ["NEUWAGEN",0],
 ];
 
+// ---------- Karten Freiheitsbahn ----------
+const BIG_INVEST = [["Hotelkette","🏨"],["Windpark-Beteiligung","🌬️"],["Software-Firma","💻"],["Einkaufszentrum","🏬"],["Logistikzentrum","🚚"],
+  ["Ärztehaus","🏥"],["Solarpark","☀️"],["Studentenwohnheim","🏢"],["Restaurant-Franchise","🍔"],["Rechenzentrum","🖥️"]];
+function fastInvest(){
+  const g = pick(BIG_INVEST), cost = step(50000,400000,25000);
+  return {name:g[0], icon:g[1], cost, fc:Math.round(cost*pick([0.06,0.08,0.1,0.12])/500)*500};
+}
+const RISKS = [
+  {t:"Rechtsstreit",    text:"Ein ehemaliger Geschäftspartner verklagt dich. Du verlierst die Hälfte deines Bargelds.", fn:p=>{ p.cash = Math.floor(p.cash/2); }},
+  {t:"Betriebsprüfung", text:"Das Finanzamt fordert Steuern nach – die Hälfte deines Bargelds ist weg.",                fn:p=>{ p.cash = Math.floor(p.cash/2); }},
+  {t:"Cyberangriff",    text:"Hacker legen deine Firmen lahm. Du verlierst 25 % deines Bargelds.",                      fn:p=>{ p.cash = Math.floor(p.cash*0.75); }},
+  {t:"Marktcrash",      text:"Deine ertragreichste Investition bricht ein und wird wertlos.", fn:p=>{
+     const inv = p.fast.invests; if(!inv.length) return " Du hast noch keine – Glück gehabt!";
+     const best = inv.reduce((a,b)=>b.fc>a.fc?b:a); p.fast.invests = inv.filter(x=>x!==best); p.fast.fc -= best.fc;
+     return ` Verloren: ${best.name} (−${eur(best.fc)} Freiheits-Cashflow).`; }},
+];
+
 // ---------- Zustand ----------
 let S = null;     // Spielzustand
 let view = 0;     // angezeigter Spieler im Bogen
+let aiTimer = null, curCard = null;
+const mq = [];    // Warteschlange für Dialoge
 
-function newPlayer(name, pi, color){
+function newPlayer(name, pi, color, dream, ai){
   const p = PROFS[pi];
-  return {name, prof:pi, color, cash:p.savings, children:0, loan:0, pos:0, skip:0, charity:0, free:false, bankrupt:false,
+  return {name, prof:pi, color, dream, ai, cash:p.savings, children:0, loan:0, pos:0, skip:0, charity:0, free:false, bankrupt:false, fast:null,
     debts:{wohnen:{pay:p.wohnen[0],debt:p.wohnen[1]}, auto:{pay:p.auto[0],debt:p.auto[1]}, karte:{pay:p.karte[0],debt:p.karte[1]}, studium:{pay:p.studium[0],debt:p.studium[1]}},
     assets:[], stocks:{}};
 }
@@ -295,8 +358,10 @@ function expenses(p){
 }
 const income = p => PROFS[p.prof].salary + passive(p);
 const cashflow = p => income(p) - expenses(p);
+const dreamOf = p => DREAMS[p.dream] || DREAMS[0];
+const nm = p => (p.ai?"🤖 ":"") + p.name;
 
-function log(msg){ S.log.unshift(msg); if(S.log.length>200) S.log.length=200; }
+function log(msg){ S.log.unshift(msg); if(S.log.length>250) S.log.length=250; }
 const store = { get:k=>{try{return localStorage.getItem(k)}catch(e){return null}}, set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}}, del:k=>{try{localStorage.removeItem(k)}catch(e){}} };
 function save(){ store.set(SAVE_KEY, JSON.stringify(S)); }
 
@@ -306,27 +371,38 @@ function pay(p, amount, why){
   if(p.cash < amount){
     const need = Math.ceil((amount-p.cash)/1000)*1000;
     p.loan += need; p.cash += need;
-    log(`🏦 ${p.name} muss ${eur(need)} Kredit aufnehmen (${why}).`);
+    log(`🏦 ${nm(p)} muss ${eur(need)} Kredit aufnehmen (${why}).`);
   }
   p.cash -= amount;
 }
 
 // ---------- Setup ----------
 function renderSetup(){
+  clearTimeout(aiTimer);
   $("#game").classList.add("hidden"); $("#mnav").classList.add("hidden");
   const saved = store.get(SAVE_KEY);
   let rows = "";
+  const defName = ["Spieler 1","Computer","",""], defAi = [false,true,false,false];
   for(let i=0;i<4;i++){
-    rows += `<div class="prow"><span class="tok" style="background:${COLORS[i]}"></span>
-      <input id="pn${i}" placeholder="Name Spieler ${i+1}" value="${i===0?"Spieler 1":""}">
-      <select id="pp${i}"><option value="-1">Beruf zufällig</option>${PROFS.map((p,j)=>`<option value="${j}">${p.n} (${eur(p.salary)})</option>`).join("")}</select></div>`;
+    rows += `<div class="pcard"><span class="tok" style="background:${COLORS[i]}"></span>
+      <input id="pn${i}" placeholder="Spieler ${i+1} (leer = nicht dabei)" value="${defName[i]}">
+      <label class="aichk"><input type="checkbox" id="pa${i}" ${defAi[i]?"checked":""}> 🤖<span class="lbl"> Computer</span></label>
+      <div class="psel">
+        <select id="pp${i}"><option value="-1">Beruf zufällig</option>${PROFS.map((p,j)=>`<option value="${j}">${p.n} (${eur(p.salary)})</option>`).join("")}</select>
+        <select id="pd${i}"><option value="-1">Traum zufällig</option>${DREAMS.map((d,j)=>`<option value="${j}">${d.i} ${d.n} (${eur(d.cost)})</option>`).join("")}</select>
+      </div></div>`;
   }
   $("#setup").classList.remove("hidden");
   $("#setup").innerHTML = `<div class="panel">
     <h2 style="margin-top:0">Neues Spiel</h2>
-    <p class="hint">1–4 Personen an einem Gerät. Leere Namen werden nicht mitgespielt.</p>
+    <p class="hint">1–4 Mitspieler an einem Gerät – Menschen und/oder Computer (🤖 anhaken). Leere Namen spielen nicht mit.</p>
     ${rows}
-    <h3>Spielziel</h3>
+    <h3>Spielmodus</h3>
+    <select id="mode" style="width:100%">
+      <option value="2">Komplett: Hamsterrad ➜ Freiheitsbahn ➜ Traum erfüllen</option>
+      <option value="1">Kurz: Sieg beim Ausbruch aus dem Hamsterrad</option>
+    </select>
+    <h3>Ausbruch-Ziel</h3>
     <select id="goal" style="width:100%">
       <option value="1">Klassisch: passives Einkommen ≥ Ausgaben</option>
       <option value="2">Profi: passives Einkommen ≥ 2× Ausgaben</option>
@@ -338,16 +414,26 @@ function renderSetup(){
   $("#btnStart").onclick = startGame;
   if(saved) $("#btnCont").onclick = ()=>{ S = JSON.parse(saved); view = S.cur; showGame(); };
 }
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+function buildDreamFields(players){
+  const fields = FAST.map((t,i)=>t==="traum"?i:-1).filter(i=>i>=0);
+  const want = [...new Set(players.map(p=>p.dream))];
+  const rest = shuffle(DREAMS.map((d,i)=>i).filter(i=>!want.includes(i)));
+  const list = shuffle(want.concat(rest).slice(0, fields.length));
+  const map = {}; fields.forEach((f,k)=>map[f]=list[k]); return map;
+}
 function startGame(){
   const players = [];
   for(let i=0;i<4;i++){
     const n = $("#pn"+i).value.trim(); if(!n) continue;
     let pi = +$("#pp"+i).value; if(pi<0) pi = rnd(0,PROFS.length-1);
-    players.push(newPlayer(n, pi, COLORS[i]));
+    let di = +$("#pd"+i).value; if(di<0) di = rnd(0,DREAMS.length-1);
+    players.push(newPlayer(n, pi, COLORS[i], di, $("#pa"+i).checked));
   }
   if(!players.length){ modal({title:"Keine Spieler", body:"<p>Bitte mindestens einen Namen eingeben.</p>", buttons:[{t:"OK"}]}); return; }
-  S = {players, cur:0, goal:+$("#goal").value, phase:"roll", dice:[0], log:[], round:1, over:false};
-  players.forEach(p=>log(`${p.name} startet als ${PROFS[p.prof].n} mit ${eur(p.cash)} Ersparnissen.`));
+  S = {players, cur:0, goal:+$("#goal").value, mode:+$("#mode").value, phase:"roll", dice:[0], log:[], round:1, over:false,
+       dreamFields: buildDreamFields(players), winners:[]};
+  players.forEach(p=>log(`${nm(p)} startet als ${PROFS[p.prof].n} mit ${eur(p.cash)} – Traum: ${dreamOf(p).i} ${dreamOf(p).n}.`));
   view = 0; showGame();
 }
 function showGame(){ $("#setup").classList.add("hidden"); $("#game").classList.remove("hidden"); $("#mnav").classList.remove("hidden"); setView("board"); render(); }
@@ -363,18 +449,28 @@ function render(){
   save();
   renderBoard(); renderSheet();
   $("#log").innerHTML = S.log.map(l=>`<div>${l}</div>`).join("");
+  scheduleAI();
 }
+function bar(pct){ return `<div class="bar"><div style="width:${Math.max(0,Math.min(100,pct))}%"></div></div>`; }
 function renderBoard(){
+  const p = P(), fast = !!p.fast, B = fast?FAST:BOARD, M = fast?FTF:FT;
+  const posOf = q => fast ? (q.fast?q.fast.pos:-1) : (q.fast?-1:q.pos);
   let h = "";
-  BOARD.forEach((t,i)=>{
-    const [r,c] = ringPos(i), f = FT[t];
-    const toks = S.players.filter(p=>p.pos===i && !p.bankrupt).map(p=>`<span class="tok" title="${p.name}" style="background:${p.color}"></span>`).join("");
-    h += `<div class="cell ${P().pos===i?"hl":""}" style="grid-row:${r};grid-column:${c};background:${f.c}"><div class="ic">${f.i}</div><div class="lb">${f.l}</div><div class="tokens">${toks}</div></div>`;
+  B.forEach((t,i)=>{
+    const [r,c] = ringPos(i); let f = M[t], extra = "";
+    if(t==="traum"){
+      const d = DREAMS[S.dreamFields[i]];
+      const owners = S.players.filter(q=>q.dream===S.dreamFields[i]).map(q=>`<span class="tok own" style="background:${q.color}"></span>`).join("");
+      f = {i:d.i, l:d.n, c:M.traum.c}; extra = `<div class="owners">${owners}</div>`;
+    }
+    const toks = S.players.filter(q=>posOf(q)===i && !q.bankrupt).map(q=>`<span class="tok" title="${q.name}" style="background:${q.color}"></span>`).join("");
+    h += `<div class="cell ${posOf(p)===i?"hl":""}" style="grid-row:${r};grid-column:${c};background:${f.c}">${extra}<div class="ic">${f.i}</div><div class="lb">${f.l}</div><div class="tokens">${toks}</div></div>`;
   });
-  const p = P();
   let ctrl = "";
   if(S.over){
-    ctrl = `<h2>Spiel beendet</h2><button class="gold" onclick="renderSetup()">Neues Spiel</button>`;
+    ctrl = `<h2>Spiel beendet</h2><div class="row"><button onclick="showResults()">🏆 Ergebnis</button><button class="gold" onclick="resetGame()">Neues Spiel</button></div>`;
+  } else if(p.ai){
+    ctrl = `<div class="hint" style="font-size:15px">🤖 ${p.name} ist am Zug …</div>`;
   } else if(S.phase==="roll"){
     ctrl = p.charity>0
       ? `<div class="row"><button onclick="roll(1)">1 Würfel</button><button class="gold" onclick="roll(2)">2 Würfel</button></div><div class="hint">Spendenbonus noch ${p.charity} Zug/Züge</div>`
@@ -382,22 +478,54 @@ function renderBoard(){
   } else {
     ctrl = `<button onclick="endTurn()" style="font-size:17px;padding:11px 24px">Zug beenden ➜</button>`;
   }
-  const dice = S.dice.map(d=>`<div class="die" id="die">${d||"·"}</div>`).join("");
+  const dice = S.dice.map(d=>`<div class="die">${d||"·"}</div>`).join("");
+  let info;
+  if(fast){
+    const d = dreamOf(p);
+    info = `<div class="hint">🌟 Freiheitsbahn · Bargeld <b>${eur(p.cash)}</b> · Freiheits-Cashflow <b class="pos">${eur(p.fast.fc)}</b></div>
+      <div class="cmini hint">${d.i} Traum ${eur(d.cost)}${bar(p.cash/d.cost*100)}</div>`;
+  } else {
+    info = `<div class="hint">${PROFS[p.prof].n} · Bargeld <b>${eur(p.cash)}</b> · Cashflow <b class="${cashflow(p)>=0?"pos":"neg"}">${eur(cashflow(p))}</b></div>
+      <div class="cmini hint">Passiv ${eur(passive(p))} von ${eur(expenses(p)*S.goal)}${bar(passive(p)/(expenses(p)*S.goal)*100)}</div>`;
+  }
   h += `<div class="center">
-    <div class="hint">Runde ${S.round}</div>
-    <h2><span class="tok" style="display:inline-block;background:${p.color};vertical-align:-1px"></span> ${p.name}</h2>
-    <div class="hint">${PROFS[p.prof].n} · Bargeld <b>${eur(p.cash)}</b> · Cashflow <b class="${cashflow(p)>=0?"pos":"neg"}">${eur(cashflow(p))}</b></div>
-    <div class="cmini hint">Passiv ${eur(passive(p))} von ${eur(expenses(p)*S.goal)}<div class="bar"><div style="width:${Math.max(0,Math.min(100,passive(p)/(expenses(p)*S.goal)*100))}%"></div></div></div>
+    <div class="hint">Runde ${S.round}${fast?" · <b style=\"color:#a87800\">Freiheitsbahn</b>":""}</div>
+    <h2><span class="tok" style="display:inline-block;background:${p.color};vertical-align:-1px"></span> ${nm(p)}</h2>
+    ${info}
     <div class="dice">${dice}</div>
     ${ctrl}
   </div>`;
   $("#board").innerHTML = h;
-  $("#legend").innerHTML = Object.values(FT).map(f=>`<span><i style="background:${f.c}"></i>${f.i} ${f.l}</span>`).join("");
+  $("#board").classList.toggle("fastboard", fast);
+  $("#legend").innerHTML = Object.values(M).map(f=>`<span><i style="background:${f.c}"></i>${f.i} ${f.l}</span>`).join("");
 }
 function renderSheet(){
-  const p = S.players[view], pr = PROFS[p.prof], isCur = view===S.cur && !S.over;
-  const pas = passive(p), exp = expenses(p), goal = exp*S.goal, pct = Math.max(0,Math.min(100, pas/goal*100));
-  const tabs = S.players.map((q,i)=>`<div class="ptab ${i===view?"act":""}" onclick="view=${i};renderSheet()"><span class="tok" style="background:${q.color}"></span>${q.name}${q.free?" 🏆":""}${q.bankrupt?" ✖":""}${i===S.cur?" ◀":""}</div>`).join("");
+  const p = S.players[view], pr = PROFS[p.prof], isCur = view===S.cur && !S.over && !p.ai;
+  const tabs = S.players.map((q,i)=>`<div class="ptab ${i===view?"act":""}" onclick="view=${i};renderSheet()"><span class="tok" style="background:${q.color}"></span>${nm(q)}${q.free?" 🏆":""}${q.fast&&!q.free?" 🌟":""}${q.bankrupt?" ✖":""}${i===S.cur?" ◀":""}</div>`).join("");
+  const d = dreamOf(p);
+  const head = `<div class="ptabs">${tabs}</div>
+    <div class="row" style="justify-content:space-between"><b style="font-size:17px">${nm(p)}</b><span class="hint">${pr.n}${p.skip?` · setzt ${p.skip}× aus`:""}</span></div>
+    <div class="hint" style="margin-top:2px">Traum: ${d.i} ${d.n} (${eur(d.cost)})${p.how?` · <b>${p.how}</b>`:""}</div>`;
+  if(p.fast){
+    const gain = p.fast.fc - p.fast.fcStart;
+    const inv = p.fast.invests.map(x=>`<tr><td>${x.icon} ${x.name}<br><span class="hint">Investiert ${eur(x.cost)}</span></td><td class="r pos">+${eur(x.fc)}</td></tr>`).join("");
+    $("#sheet").innerHTML = head + `
+      <div class="big" style="margin-top:8px">
+        <div class="kpi"><small>Bargeld</small><b>${eur(p.cash)}</b></div>
+        <div class="kpi"><small>Freiheits-Cashflow</small><b class="pos">${eur(p.fast.fc)}</b></div>
+      </div>
+      <h3>Siegweg A – Traum kaufen</h3>
+      <div class="row" style="justify-content:space-between;font-size:14px"><span>${d.i} ${d.n}</span><span>${eur(Math.min(p.cash,d.cost))} / <b>${eur(d.cost)}</b></span></div>
+      ${bar(p.cash/d.cost*100)}
+      <p class="hint" style="margin:4px 0 0">Lande auf deinem Traumfeld (Rand mit deiner Farbe) und bezahle ihn.</p>
+      <h3>Siegweg B – Cashflow +${eur(FAST_GOAL)}</h3>
+      <div class="row" style="justify-content:space-between;font-size:14px"><span>Start ${eur(p.fast.fcStart)}</span><span>+${eur(Math.max(0,gain))} / <b>+${eur(FAST_GOAL)}</b></span></div>
+      ${bar(gain/FAST_GOAL*100)}
+      <h3>Großinvestitionen</h3>
+      <table>${inv||'<tr><td class="hint">Noch keine – Investitionsfelder bringen zusätzlichen Cashflow.</td></tr>'}</table>`;
+    return;
+  }
+  const pas = passive(p), exp = expenses(p), goal = exp*S.goal;
   const dl = {wohnen:p.debts.wohnen.debt>0?"Hypothek Eigenheim":"Miete", auto:"Autokredit", karte:"Kreditkarte", studium:"Studienkredit"};
   let expRows = `<tr><td>Steuern & Abgaben</td><td class="r">${eur(pr.tax)}</td></tr>`;
   for(const k of ["wohnen","auto","karte","studium"]) if(p.debts[k].pay>0) expRows += `<tr><td>${dl[k]}</td><td class="r">${eur(p.debts[k].pay)}</td></tr>`;
@@ -410,15 +538,14 @@ function renderSheet(){
   for(const k of ["wohnen","auto","karte","studium"]) if(p.debts[k].debt>0)
     debtRows += `<tr><td>${dl[k]}</td><td class="r">${eur(p.debts[k].debt)}</td><td class="r">${isCur?`<button class="sm sec" ${p.cash<p.debts[k].debt?"disabled":""} onclick="payDebt('${k}')">Tilgen</button>`:""}</td></tr>`;
   if(p.loan) debtRows += `<tr><td>Bankkredit</td><td class="r">${eur(p.loan)}</td><td class="r">${isCur?`<button class="sm sec" ${p.cash<1000?"disabled":""} onclick="repay()">−1.000</button>`:""}</td></tr>`;
-  $("#sheet").innerHTML = `<div class="ptabs">${tabs}</div>
-    <div class="row" style="justify-content:space-between"><b style="font-size:17px">${p.name}</b><span class="hint">${pr.n}${p.skip?` · setzt ${p.skip}× aus`:""}</span></div>
+  $("#sheet").innerHTML = head + `
     <div class="big" style="margin-top:8px">
       <div class="kpi"><small>Bargeld</small><b>${eur(p.cash)}</b></div>
       <div class="kpi"><small>Monatl. Cashflow</small><b class="${cashflow(p)>=0?"pos":"neg"}">${eur(cashflow(p))}</b></div>
     </div>
     <h3>Ausbruch aus dem Hamsterrad</h3>
     <div class="row" style="justify-content:space-between;font-size:14px"><span>Passiv: <b>${eur(pas)}</b></span><span>Ziel: <b>${eur(goal)}</b></span></div>
-    <div class="bar"><div style="width:${pct}%"></div></div>
+    ${bar(pas/goal*100)}
     <h3>Einnahmen</h3>
     <table><tr><td>Gehalt</td><td class="r">${eur(pr.salary)}</td></tr>
       <tr><td>Passives Einkommen</td><td class="r">${eur(pas)}</td></tr>
@@ -432,43 +559,75 @@ function renderSheet(){
     ${isCur?`<div class="row" style="margin-top:10px"><button class="sm" onclick="borrow()">Kredit +1.000 €</button><span class="hint">nur bei positivem Cashflow</span></div>`:""}`;
 }
 
-// ---------- Modal ----------
+// ---------- Dialoge ----------
 function modal({title, color="#0f3d2e", icon="", body="", buttons=[]}){
   const root = $("#modalRoot");
   root.innerHTML = `<div class="ov"><div class="modal"><div class="mh" style="background:${color}">${icon} ${title}</div><div class="mb">${body}</div><div class="mf" id="mf"></div></div></div>`;
   buttons.forEach(b=>{
     const el = document.createElement("button");
     el.textContent = b.t; if(b.cls) el.className = b.cls; if(b.dis) el.disabled = true;
-    el.onclick = ()=>{ if(b.keep){ b.fn&&b.fn(); return; } closeModal(); b.fn&&b.fn(); };
+    el.onclick = ()=>{ closeModal(); b.fn&&b.fn(); flushQ(); };
     $("#mf").appendChild(el);
   });
 }
+function queueModal(o){ if($("#modalRoot").innerHTML) mq.push(o); else modal(o); }
+function flushQ(){ if(!$("#modalRoot").innerHTML && mq.length) modal(mq.shift()); }
 function closeModal(){ $("#modalRoot").innerHTML=""; }
 function done(){ S.phase="end"; checkAll(); render(); }
 
+// ---------- Computer-Spieler ----------
+function scheduleAI(){
+  clearTimeout(aiTimer);
+  if(!S || S.over) return;
+  const p = P(); if(!p.ai) return;
+  aiTimer = setTimeout(()=>{
+    if(!S || S.over || P()!==p) return;
+    if($("#modalRoot").innerHTML || S.phase==="resolve"){ scheduleAI(); return; }
+    if(S.phase==="roll"){ aiManage(p); roll(p.charity>0?2:1); }
+    else if(S.phase==="end") endTurn();
+  }, 1000);
+}
+function aiManage(p){
+  if(p.fast) return;
+  for(const k of ["karte","auto","studium","wohnen"]){
+    const d = p.debts[k]; if(d.debt>0 && p.cash >= d.debt + 2000) doPayDebt(p,k);
+  }
+  while(p.loan>=1000 && p.cash >= 9000){ p.loan-=1000; p.cash-=1000; }
+}
+function aiWantsAsset(p,c){
+  if(c.cf<=0 || c.cf*12/c.down < 0.12) return false;
+  if(p.cash>=c.down) return true;
+  const need = Math.ceil((c.down-p.cash)/1000)*1000;   // Rest per Kredit – wie bei Menschen
+  return c.cf - need/100 >= 50 && cashflow(p) + c.cf - need/100 >= 0 && p.loan + need <= loanCap(p);
+}
+
 // ---------- Zugablauf ----------
 function roll(n){
-  const p = P();
+  const p = P(); if(S.phase!=="roll") return;
   if(p.charity>0) p.charity--;
   S.dice = Array.from({length:n},()=>rnd(1,6));
   const total = S.dice.reduce((a,b)=>a+b,0);
-  const old = p.pos; p.pos = (p.pos+total) % BOARD.length;
-  log(`🎲 ${p.name} würfelt ${S.dice.join(" + ")} = ${total}.`);
-  // Zahltage überquert (ohne das Zielfeld)
-  for(let k=1;k<total;k++) if(BOARD[(old+k)%BOARD.length]==="zahltag") payday(p);
+  log(`🎲 ${nm(p)} würfelt ${S.dice.join(" + ")} = ${total}.`);
+  if(p.fast){
+    const old = p.fast.pos; p.fast.pos = (old+total) % FAST.length;
+    for(let k=1;k<total;k++) if(FAST[(old+k)%FAST.length]==="fzahltag") fastPayday(p);
+  } else {
+    const old = p.pos; p.pos = (old+total) % BOARD.length;
+    for(let k=1;k<total;k++) if(BOARD[(old+k)%BOARD.length]==="zahltag") payday(p);
+  }
   S.phase="resolve"; render();
-  const d = document.querySelectorAll(".die"); d.forEach(x=>x.classList.add("roll"));
-  setTimeout(()=>resolveField(p), 380);
+  document.querySelectorAll(".die").forEach(x=>x.classList.add("roll"));
+  setTimeout(()=> p.fast ? resolveFast(p) : resolveField(p), 380);
 }
 function payday(p){
   const cf = cashflow(p);
-  if(cf>=0){ p.cash += cf; log(`💶 Zahltag für ${p.name}: +${eur(cf)}.`); return; }
-  // negativer Cashflow
-  if(p.cash >= -cf){ p.cash += cf; log(`⚠️ Zahltag für ${p.name}: ${eur(cf)} (negativer Cashflow).`); return; }
+  if(cf>=0){ p.cash += cf; log(`💶 Zahltag für ${nm(p)}: +${eur(cf)}.`); return; }
+  if(p.cash >= -cf){ p.cash += cf; log(`⚠️ Zahltag für ${nm(p)}: ${eur(cf)} (negativer Cashflow).`); return; }
   liquidate(p, -cf);
 }
+function fastPayday(p){ p.cash += p.fast.fc; log(`💰 Geldfluss-Tag für ${nm(p)}: +${eur(p.fast.fc)}.`); }
 function liquidate(p, need){
-  log(`🚨 ${p.name} kann den negativen Cashflow nicht decken – Notverkauf zum halben Wert.`);
+  log(`🚨 ${nm(p)} kann den negativen Cashflow nicht decken – Notverkauf zum halben Wert.`);
   for(const a of [...p.assets]){
     if(p.cash>=need) break;
     p.cash += Math.max(0, Math.round(a.price*0.5) - a.mortgage);
@@ -478,64 +637,139 @@ function liquidate(p, need){
     if(p.cash>=need) break;
     p.cash += Math.round(p.stocks[t].cost*0.5); delete p.stocks[t];
   }
-  if(p.cash>=need && cashflow(p)>=0){ p.cash -= need; return; }
   if(p.cash>=need){ p.cash -= need; return; }
-  p.bankrupt = true; log(`✖ ${p.name} ist insolvent und scheidet aus.`);
+  p.bankrupt = true; log(`✖ ${nm(p)} ist insolvent und scheidet aus.`);
+}
+// Zeigt Menschen einen Info-Dialog; Computer machen sofort weiter
+function info(p, f, title, body, btn="Weiter"){
+  if(p.ai) return done();
+  modal({title, icon:f.i, color:f.c, body, buttons:[{t:btn, fn:done}]});
 }
 function resolveField(p){
   const t = BOARD[p.pos], f = FT[t];
-  if(t==="zahltag"){ payday(p); modal({title:"Zahltag", icon:f.i, color:f.c, body:`<p>Dein monatlicher Cashflow von <b>${eur(cashflow(p))}</b> wird verbucht.</p>`, buttons:[{t:"Weiter", fn:done}]}); return; }
+  if(t==="zahltag"){ payday(p); return info(p, f, "Zahltag", `<p>Dein monatlicher Cashflow von <b>${eur(cashflow(p))}</b> wird verbucht.</p>`); }
   if(t==="chance"){
-    modal({title:"Gelegenheit", icon:f.i, color:f.c,
+    if(p.ai) return showDeal(p.cash>=40000 ? bigDeal() : smallDeal());
+    return modal({title:"Gelegenheit", icon:f.i, color:f.c,
       body:`<p>Welche Art von Geschäft suchst du?</p><div class="facts"><span>Kleines Geschäft</span><span>bis ca. 7.000 €</span><span>Großes Geschäft</span><span>ab ca. 7.000 € Eigenkapital</span></div><p class="hint">Bargeld: ${eur(p.cash)}</p>`,
       buttons:[{t:"Kleines Geschäft", fn:()=>showDeal(smallDeal())},{t:"Großes Geschäft", cls:"gold", fn:()=>showDeal(bigDeal())}]});
-    return;
   }
-  if(t==="markt"){ showMarket(marketCard()); return; }
+  if(t==="markt") return showMarket(marketCard());
   if(t==="konsum"){
     const k = pick(KONSUM);
     if(k[0]==="NEUWAGEN"){
       p.debts.auto.pay += 250; p.debts.auto.debt += 15000;
-      log(`🚗 ${p.name} least einen Neuwagen: +250 €/Monat, +15.000 € Schulden.`);
-      modal({title:"Konsum: Neuwagen!", icon:f.i, color:f.c, body:`<p>Du konntest nicht widerstehen und hast einen Neuwagen finanziert.</p><div class="facts"><span>Neue Rate</span><span>+250 €/Monat</span><span>Neue Schulden</span><span>15.000 €</span></div>`, buttons:[{t:"Autsch", fn:done}]});
-    } else {
-      pay(p, k[1], k[0]); log(`🛍️ ${p.name}: ${k[0]} kostet ${eur(k[1])}.`);
-      modal({title:"Konsum", icon:f.i, color:f.c, body:`<p><b>${k[0]}</b></p><div class="facts"><span>Kosten</span><span>${eur(k[1])}</span></div>`, buttons:[{t:"Bezahlen", fn:done}]});
+      log(`🚗 ${nm(p)} finanziert einen Neuwagen: +250 €/Monat, +15.000 € Schulden.`);
+      return info(p, f, "Konsum: Neuwagen!", `<p>Du konntest nicht widerstehen und hast einen Neuwagen finanziert.</p><div class="facts"><span>Neue Rate</span><span>+250 €/Monat</span><span>Neue Schulden</span><span>15.000 €</span></div>`, "Autsch");
     }
-    return;
+    pay(p, k[1], k[0]); log(`🛍️ ${nm(p)}: ${k[0]} kostet ${eur(k[1])}.`);
+    return info(p, f, "Konsum", `<p><b>${k[0]}</b></p><div class="facts"><span>Kosten</span><span>${eur(k[1])}</span></div>`, "Bezahlen");
   }
   if(t==="kind"){
-    if(p.children<3){ p.children++; log(`👶 ${p.name} bekommt Nachwuchs (${p.children}).`);
-      modal({title:"Nachwuchs!", icon:f.i, color:f.c, body:`<p>Herzlichen Glückwunsch! Deine monatlichen Ausgaben steigen um <b>${eur(PROFS[p.prof].kind)}</b>.</p>`, buttons:[{t:"Wie schön", fn:done}]});
-    } else modal({title:"Nachwuchs?", icon:f.i, color:f.c, body:`<p>Drei Kinder sind genug – nichts passiert.</p>`, buttons:[{t:"Weiter", fn:done}]});
-    return;
+    if(p.children<3){ p.children++; log(`👶 ${nm(p)} bekommt Nachwuchs (${p.children}).`);
+      return info(p, f, "Nachwuchs!", `<p>Herzlichen Glückwunsch! Deine monatlichen Ausgaben steigen um <b>${eur(PROFS[p.prof].kind)}</b>.</p>`, "Wie schön"); }
+    return info(p, f, "Nachwuchs?", `<p>Drei Kinder sind genug – nichts passiert.</p>`);
   }
   if(t==="spende"){
     const amt = Math.round(income(p)*0.1);
-    modal({title:"Spende", icon:f.i, color:f.c, body:`<p>Spende 10 % deines Einkommens (<b>${eur(amt)}</b>) für einen guten Zweck. Dafür darfst du die nächsten <b>3 Züge</b> wahlweise mit 2 Würfeln würfeln.</p>`,
-      buttons:[{t:"Nein danke", cls:"sec", fn:done},{t:`Spenden (${eur(amt)})`, cls:"gold", dis:p.cash<amt, fn:()=>{ p.cash-=amt; p.charity=3; log(`🤝 ${p.name} spendet ${eur(amt)}.`); done(); }}]});
-    return;
+    const give = ()=>{ p.cash-=amt; p.charity=3; log(`🤝 ${nm(p)} spendet ${eur(amt)}.`); };
+    if(p.ai){ if(p.cash>=amt+3000) give(); return done(); }
+    return modal({title:"Spende", icon:f.i, color:f.c, body:`<p>Spende 10 % deines Einkommens (<b>${eur(amt)}</b>) für einen guten Zweck. Dafür darfst du die nächsten <b>3 Züge</b> wahlweise mit 2 Würfeln würfeln.</p>`,
+      buttons:[{t:"Nein danke", cls:"sec", fn:done},{t:`Spenden (${eur(amt)})`, cls:"gold", dis:p.cash<amt, fn:()=>{ give(); done(); }}]});
   }
   if(t==="kuendigung"){
     const e = expenses(p); pay(p, e, "Kündigung"); p.skip = 2;
-    log(`📦 ${p.name} verliert den Job: zahlt ${eur(e)} und setzt 2 Runden aus.`);
-    modal({title:"Kündigung", icon:f.i, color:f.c, body:`<p>Dein Arbeitgeber baut Stellen ab. Du zahlst eine Monatsausgabe von <b>${eur(e)}</b> und setzt <b>2 Runden</b> aus.</p>`, buttons:[{t:"Mist", fn:done}]});
+    log(`📦 ${nm(p)} verliert den Job: zahlt ${eur(e)} und setzt 2 Runden aus.`);
+    return info(p, f, "Kündigung", `<p>Dein Arbeitgeber baut Stellen ab. Du zahlst eine Monatsausgabe von <b>${eur(e)}</b> und setzt <b>2 Runden</b> aus.</p>`, "Mist");
   }
 }
 
+// ---------- Freiheitsbahn ----------
+function resolveFast(p){
+  const t = FAST[p.fast.pos], f = FTF[t];
+  if(t==="fzahltag"){ fastPayday(p); return info(p, f, "Geldfluss-Tag", `<p>Dein Freiheits-Cashflow von <b>${eur(p.fast.fc)}</b> wird verbucht.</p>`); }
+  if(t==="invest"){
+    const c = fastInvest();
+    const buy = ()=>{ p.cash -= c.cost; p.fast.invests.push(c); p.fast.fc += c.fc; log(`🏗️ ${nm(p)} investiert ${eur(c.cost)} in ${c.name}: +${eur(c.fc)} Freiheits-Cashflow.`); };
+    if(p.ai){ if(p.cash>=c.cost) buy(); else log(`🤖 ${nm(p)} kann sich ${c.name} (${eur(c.cost)}) nicht leisten.`); return done(); }
+    return modal({title:"Großinvestition: "+c.name, icon:c.icon, color:f.c,
+      body:`<div class="facts"><span>Kaufpreis (nur bar)</span><span>${eur(c.cost)}</span><span>Zusätzlicher Freiheits-Cashflow</span><span class="pos">+${eur(c.fc)}</span><span>Rendite</span><span>${(c.fc/c.cost*100).toFixed(0)} % pro Geldfluss-Tag</span></div><p class="hint">Dein Bargeld: ${eur(p.cash)}</p>`,
+      buttons:[{t:"Ablehnen", cls:"sec", fn:done},{t:"Investieren", cls:"gold", dis:p.cash<c.cost, fn:()=>{ buy(); done(); }}]});
+  }
+  if(t==="traum"){
+    const di = S.dreamFields[p.fast.pos], d = DREAMS[di], own = di===p.dream;
+    if(!own){
+      const who = S.players.filter(q=>q.dream===di).map(q=>q.name).join(", ");
+      return info(p, f, `${d.i} ${d.n}`, `<p>Ein schöner Traum – aber nicht deiner${who?` (sondern von ${who})`:""}. Nichts passiert.</p>`);
+    }
+    const buy = ()=>{ p.cash -= d.cost; p.fast.dreamBought = true; log(`🌟 ${nm(p)} erfüllt sich den Traum: ${d.i} ${d.n}!`); };
+    if(p.ai){ if(p.cash>=d.cost) buy(); else log(`🤖 ${nm(p)} steht vor dem Traum, hat aber erst ${eur(p.cash)}.`); return done(); }
+    return modal({title:`Dein Traum: ${d.n}`, icon:d.i, color:f.c,
+      body:`<p>Du stehst vor deinem Lebenstraum! Wenn du ihn jetzt bezahlst, hast du das Spiel gewonnen.</p><div class="facts"><span>Preis</span><span>${eur(d.cost)}</span><span>Dein Bargeld</span><span>${eur(p.cash)}</span></div>`,
+      buttons:[{t:p.cash<d.cost?"Noch zu teuer":"Später", cls:"sec", fn:done},{t:"Traum kaufen 🌟", cls:"gold", dis:p.cash<d.cost, fn:()=>{ buy(); done(); }}]});
+  }
+  if(t==="risiko"){
+    const r = pick(RISKS), before = p.cash, extra = r.fn(p) || "";
+    log(`⚡ ${nm(p)}: ${r.t}${before!==p.cash?` (−${eur(before-p.cash)})`:""}.${extra}`);
+    return info(p, f, r.t, `<p>${r.text}${extra}</p>${before!==p.cash?`<div class="facts"><span>Verlust</span><span class="neg">${eur(before-p.cash)}</span></div>`:""}`, "Mist");
+  }
+  if(t==="wagnis"){
+    const go = ()=>{
+      p.cash -= WAGNIS_COST; const w = rnd(1,6);
+      if(w>=5){ p.cash += WAGNIS_WIN; log(`🎯 ${nm(p)} wagt ein Start-up-Investment – Würfel ${w}: Volltreffer, +${eur(WAGNIS_WIN)}!`); return `<p>🎲 Du würfelst eine <b>${w}</b> – <b>Volltreffer!</b> Das Start-up wird übernommen: +${eur(WAGNIS_WIN)}.</p>`; }
+      log(`🎯 ${nm(p)} wagt ein Start-up-Investment – Würfel ${w}: leider verloren.`); return `<p>🎲 Du würfelst eine <b>${w}</b> – das Start-up ist gescheitert. ${eur(WAGNIS_COST)} sind weg.</p>`;
+    };
+    if(p.ai){ if(p.cash >= WAGNIS_COST*4) go(); return done(); }
+    return modal({title:"Wagnis: Start-up-Beteiligung", icon:f.i, color:f.c,
+      body:`<p>Investiere <b>${eur(WAGNIS_COST)}</b> in ein junges Start-up. Würfelst du eine <b>5 oder 6</b>, bekommst du <b>${eur(WAGNIS_WIN)}</b>. Sonst ist das Geld weg.</p><p class="hint">Dein Bargeld: ${eur(p.cash)}</p>`,
+      buttons:[{t:"Lieber nicht", cls:"sec", fn:done},{t:"Wagen 🎲", cls:"gold", dis:p.cash<WAGNIS_COST, fn:()=>{ const res = go(); modal({title:"Ergebnis", icon:f.i, color:f.c, body:res, buttons:[{t:"Weiter", fn:done}]}); }}]});
+  }
+  if(t==="stiftung"){
+    const amt = p.fast.fc;
+    const give = ()=>{ p.cash -= amt; p.charity = 3; log(`🤝 ${nm(p)} gibt ${eur(amt)} an die eigene Stiftung.`); };
+    if(p.ai){ if(p.cash >= amt*3) give(); return done(); }
+    return modal({title:"Stiftung", icon:f.i, color:f.c, body:`<p>Spende einen Freiheits-Cashflow (<b>${eur(amt)}</b>) an deine Stiftung. Dafür darfst du 3 Züge lang wahlweise mit 2 Würfeln würfeln.</p>`,
+      buttons:[{t:"Nein danke", cls:"sec", fn:done},{t:`Spenden (${eur(amt)})`, cls:"gold", dis:p.cash<amt, fn:()=>{ give(); done(); }}]});
+  }
+}
+function enterFast(p){
+  const fc = passive(p)*FAST_MULT;
+  p.fast = {fc, fcStart:fc, pos:0, invests:[], dreamBought:false};
+  p.cash += fc; p.charity = 0; p.skip = 0;
+  log(`🚀 ${nm(p)} ist aus dem Hamsterrad ausgebrochen und wechselt auf die Freiheitsbahn (Freiheits-Cashflow ${eur(fc)}).`);
+  const d = dreamOf(p);
+  if(!p.ai || S.players.every(q=>q.ai)) queueModal({title:"Raus aus dem Hamsterrad!", icon:"🚀", color:"#a87800",
+    body:`<p><b>${p.name}</b> ist finanziell frei und wechselt auf die <b>Freiheitsbahn</b>.</p>
+      <div class="facts"><span>Freiheits-Cashflow (passiv × ${FAST_MULT})</span><span class="pos">${eur(fc)}</span><span>Startbonus (bar)</span><span>${eur(fc)}</span></div>
+      <p><b>Gewinnen</b> kannst du jetzt auf zwei Wegen:<br>🅰 Deinen Traum <b>${d.i} ${d.n}</b> für ${eur(d.cost)} kaufen (auf seinem Feld landen) – oder<br>🅱 deinen Freiheits-Cashflow um <b>${eur(FAST_GOAL)}</b> steigern.</p>`,
+    buttons:[{t:"Los geht's", cls:"gold"}]});
+  else queueModal({title:"Ausbruch!", icon:"🚀", color:"#a87800", body:`<p>🤖 <b>${p.name}</b> ist aus dem Hamsterrad ausgebrochen und spielt jetzt auf der Freiheitsbahn.</p>`, buttons:[{t:"Weiter"}]});
+}
+
 // ---------- Geschäfte ----------
+function buyAsset(p,c){
+  const mortgage = c.price - c.down;
+  pay(p, c.down, c.name);
+  p.assets.push({id:uid(), cat:c.cat, name:c.name, price:c.price, down:c.down, mortgage, cf:c.cf, units:c.units||0});
+  log(`✅ ${nm(p)} kauft ${c.name} für ${eur(c.price)} (EK ${eur(c.down)}, Cashflow ${eur(c.cf)}).`);
+}
+function doBuyStock(p,t,price,q){
+  p.cash -= q*price;
+  const s = p.stocks[t] || (p.stocks[t]={qty:0,cost:0}); s.qty+=q; s.cost+=q*price;
+  log(`📊 ${nm(p)} kauft ${q.toLocaleString("de-DE")} × ${t} zu ${eur(price)}.`);
+}
+function doSellStock(q,t,price){
+  const s = q.stocks[t]; if(!s) return;
+  const g = s.qty*price - s.cost;
+  q.cash += s.qty*price; delete q.stocks[t];
+  log(`📊 ${nm(q)} verkauft ${s.qty.toLocaleString("de-DE")} × ${t} zu ${eur(price)} (${g>=0?"Gewinn":"Verlust"} ${eur(Math.abs(g))}).`);
+}
 function showDeal(c){
-  const p = P();
-  if(c.kind==="aktie"){
-    const holders = S.players.filter(q=>!q.bankrupt && q.stocks[c.ticker]);
-    const sellHtml = holders.map(q=>`<div class="sellrow"><span>${q.name}: ${q.stocks[c.ticker].qty.toLocaleString("de-DE")} Stück (Ø ${eur(q.stocks[c.ticker].cost/q.stocks[c.ticker].qty)})</span><button class="sm red" onclick="sellStock(${S.players.indexOf(q)},'${c.ticker}',${c.price})">Alle verkaufen: ${eur(q.stocks[c.ticker].qty*c.price)}</button></div>`).join("");
-    const maxQ = Math.floor(p.cash/c.price);
-    modal({title:c.title, icon:"📊", color:"#1565c0",
-      body:`<p>${c.text}</p><div class="facts"><span>Aktueller Kurs</span><span>${eur(c.price)}</span><span>Dein Bargeld</span><span>${eur(p.cash)}</span><span>Maximal kaufbar</span><span>${maxQ.toLocaleString("de-DE")} Stück</span></div>
-      <div class="row"><input type="number" id="qty" min="1" step="100" value="${Math.min(maxQ, 100)}" style="width:130px"> Stück <button class="sm" onclick="buyStock('${c.ticker}',${c.price})">Kaufen</button></div>
-      ${sellHtml?`<h3>Zum aktuellen Kurs verkaufen</h3>${sellHtml}`:""}<p class="hint" id="stockMsg" style="margin-top:8px"></p>`,
-      buttons:[{t:"Fertig", fn:done}]});
-    return;
+  const p = P(); curCard = c;
+  if(c.kind==="aktie") return stockCard(c, true);
+  if(p.ai){
+    if(aiWantsAsset(p,c)) buyAsset(p,c); else log(`🤖 ${nm(p)} lehnt ab: ${c.name} (${eur(c.price)}, Cashflow ${eur(c.cf)}).`);
+    return done();
   }
   const mortgage = c.price - c.down, can = p.cash >= c.down;
   const needLoan = can ? 0 : Math.ceil((c.down-p.cash)/1000)*1000;
@@ -544,115 +778,173 @@ function showDeal(c){
     body:`<p>${c.text}</p><div class="facts"><span>Kaufpreis</span><span>${eur(c.price)}</span><span>Eigenkapital</span><span>${eur(c.down)}</span>${mortgage?`<span>Darlehen</span><span>${eur(mortgage)}</span>`:""}<span>Cashflow (nach Zins & Tilgung)</span><span class="${c.cf>=0?"pos":"neg"}">${eur(c.cf)}/Monat</span><span>Rendite aufs Eigenkapital</span><span>${(c.cf*12/c.down*100).toFixed(1).replace(".",",")} % p.a.</span></div>
     <p class="hint">Dein Bargeld: ${eur(p.cash)}${!can ? (loanOk ? ` – fehlende ${eur(needLoan)} per Bankkredit (${eur(needLoan/100)}/Monat) finanzierbar.` : ` – die Bank finanziert die fehlenden ${eur(needLoan)} nicht (Cashflow würde negativ oder Kreditrahmen ${eur(loanCap(p))} überschritten).`) : ""}</p>`,
     buttons:[{t:"Ablehnen", cls:"sec", fn:done},
-      {t: can?"Kaufen":"Mit Kredit kaufen", cls:"gold", dis:!loanOk, fn:()=>{
-        pay(p, c.down, c.name);
-        p.assets.push({id:uid(), cat:c.cat, name:c.name, price:c.price, mortgage, cf:c.cf, units:c.units||0});
-        log(`✅ ${p.name} kauft ${c.name} für ${eur(c.price)} (EK ${eur(c.down)}, Cashflow ${eur(c.cf)}).`);
-        done();
-      }}]});
+      {t: can?"Kaufen":"Mit Kredit kaufen", cls:"gold", dis:!loanOk, fn:()=>{ buyAsset(p,c); done(); }}]});
 }
-function buyStock(t, price){
-  const p = P(), q = Math.floor(+$("#qty").value||0);
+// Aktienkarte: Computer entscheiden sofort, Menschen bekommen einen Dialog
+function stockCard(c, first){
+  const p = P();
+  if(first){
+    S.players.forEach(q=>{ const s=q.stocks[c.ticker];
+      if(q.ai && !q.bankrupt && s && (c.price>=30 || (c.price>=15 && c.price >= 2*s.cost/s.qty))) doSellStock(q,c.ticker,c.price); });
+    if(p.ai && c.price<=10 && p.cash>=2000){ const q = Math.floor(p.cash*0.4/c.price/100)*100; if(q>0) doBuyStock(p,c.ticker,c.price,q); }
+  }
+  const holders = S.players.filter(q=>!q.ai && !q.bankrupt && q.stocks[c.ticker]);
+  if(p.ai && !holders.length) return done();
+  const sellHtml = holders.map(q=>{ const s=q.stocks[c.ticker]; return `<div class="sellrow"><span>${q.name}: ${s.qty.toLocaleString("de-DE")} Stück (Ø ${eur(s.cost/s.qty)})</span><button class="sm red" onclick="sellStock(${S.players.indexOf(q)})">Alle verkaufen: ${eur(s.qty*c.price)}</button></div>`; }).join("");
+  const maxQ = Math.floor(p.cash/c.price);
+  modal({title:c.title, icon:"📊", color:"#1565c0",
+    body:`<p>${c.text}</p><div class="facts"><span>Aktueller Kurs</span><span>${eur(c.price)}</span>${p.ai?"":`<span>Dein Bargeld</span><span>${eur(p.cash)}</span><span>Maximal kaufbar</span><span>${maxQ.toLocaleString("de-DE")} Stück</span>`}</div>
+    ${p.ai?`<p class="hint">🤖 ${p.name} hat diese Karte gezogen – du darfst zu diesem Kurs verkaufen.</p>`:`<div class="row"><input type="number" id="qty" min="1" step="100" value="${Math.min(maxQ, 100)}" style="width:130px"> Stück <button class="sm" onclick="buyStock()">Kaufen</button></div>`}
+    ${sellHtml?`<h3>Zum aktuellen Kurs verkaufen</h3>${sellHtml}`:""}<p class="hint" id="stockMsg" style="margin-top:8px"></p>`,
+    buttons:[{t:"Fertig", fn:done}]});
+}
+function buyStock(){
+  const p = P(), c = curCard, q = Math.floor(+$("#qty").value||0);
   if(q<=0) return;
-  if(q*price > p.cash){ $("#stockMsg").textContent = "Nicht genug Bargeld."; return; }
-  p.cash -= q*price;
-  const s = p.stocks[t] || (p.stocks[t]={qty:0,cost:0}); s.qty+=q; s.cost+=q*price;
-  log(`📊 ${p.name} kauft ${q.toLocaleString("de-DE")} × ${t} zu ${eur(price)}.`);
-  closeModal(); done();
+  if(q*c.price > p.cash){ $("#stockMsg").textContent = "Nicht genug Bargeld."; return; }
+  doBuyStock(p,c.ticker,c.price,q); closeModal(); done();
 }
-function sellStock(pi, t, price){
-  const q = S.players[pi], s = q.stocks[t]; if(!s) return;
-  const g = s.qty*price - s.cost;
-  q.cash += s.qty*price; delete q.stocks[t];
-  log(`📊 ${q.name} verkauft ${s.qty.toLocaleString("de-DE")} × ${t} zu ${eur(price)} (${g>=0?"Gewinn":"Verlust"} ${eur(Math.abs(g))}).`);
-  closeModal(); done();
+function sellStock(pi){
+  doSellStock(S.players[pi], curCard.ticker, curCard.price);
+  renderSheet(); save(); stockCard(curCard, false);
 }
 
 // ---------- Markt ----------
-function showMarket(c){
-  const p = P(), f = FT.markt;
+function applyEvent(c,p){
+  if(c.ev==="miete"){ S.players.forEach(q=>q.assets.forEach(a=>{ if(a.cat==="wohnung") a.cf+=50; })); log("📈 Mietspiegel steigt: Eigentumswohnungen +50 €/Monat."); }
+  if(c.ev==="heizung"){ if(p.assets.some(a=>a.cat==="haus")){ pay(p,2500,"Heizungsschaden"); log(`🔧 ${nm(p)} zahlt 2.500 € für die Heizung.`); } else c.text += " – Du besitzt keins, Glück gehabt!"; }
+  if(c.ev==="split"){ S.players.forEach(q=>{ if(q.stocks[c.ticker]){ q.stocks[c.ticker].qty*=2; } }); log(`📈 Aktiensplit ${c.ticker} 2:1.`); }
+}
+function doSellAsset(q,a,o){
+  const net = o - a.mortgage;
+  q.cash += net; q.assets = q.assets.filter(x=>x!==a);
+  log(`💰 ${nm(q)} verkauft ${a.name} für ${eur(o)} (netto ${eur(net)}).`);
+}
+function showMarket(c, again){
+  const p = P(), f = FT.markt; curCard = c;
   if(c.kind==="event"){
-    if(c.ev==="miete"){ S.players.forEach(q=>q.assets.forEach(a=>{ if(a.cat==="wohnung") a.cf+=50; })); log("📈 Mietspiegel steigt: Eigentumswohnungen +50 €/Monat."); }
-    if(c.ev==="heizung"){ if(p.assets.some(a=>a.cat==="haus")){ pay(p,2500,"Heizungsschaden"); log(`🔧 ${p.name} zahlt 2.500 € für die Heizung.`); } else c.text += " – Du besitzt keins, Glück gehabt!"; }
-    if(c.ev==="split"){ const t = c.text.match(/Aktie (\w+)/)[1]; S.players.forEach(q=>{ if(q.stocks[t]) q.stocks[t].qty*=2; }); log(`📈 Aktiensplit ${t} 2:1.`); }
-    modal({title:c.title, icon:f.i, color:f.c, body:`<p>${c.text}</p>`, buttons:[{t:"Weiter", fn:done}]});
-    return;
+    applyEvent(c,p);
+    return info(p, f, c.title, `<p>${c.text}</p>`);
   }
-  S._offer = c;
+  if(!again){ // Computer entscheiden selbst
+    S.players.forEach(q=>{ if(!q.ai || q.bankrupt) return;
+      q.assets.filter(a=>a.cat===c.cat).forEach(a=>{ const o=c.offer(a), base=Math.max(1000, a.down||(a.price-a.mortgage)); if(o-a.mortgage >= base*2.5) doSellAsset(q,a,o); }); });
+  }
   const rows = [];
-  S.players.forEach((q,qi)=>{ if(q.bankrupt) return; q.assets.forEach(a=>{ if(a.cat===c.cat){
+  S.players.forEach((q,qi)=>{ if(q.ai || q.bankrupt) return; q.assets.forEach(a=>{ if(a.cat===c.cat){
     const o = c.offer(a), net = o - a.mortgage;
     rows.push(`<div class="sellrow"><span><b>${q.name}</b>: ${a.name}<br><span class="hint">Kauf ${eur(a.price)} · Darlehen ${eur(a.mortgage)} · CF ${eur(a.cf)}</span></span><button class="sm red" onclick="sellAsset(${qi},'${a.id}')">Verkaufen<br>netto ${eur(net)}</button></div>`);
   }}); });
-  modal({title:c.title, icon:f.i, color:f.c, body:`<p>${c.text}</p>${rows.length?rows.join(""):'<p class="hint">Niemand besitzt einen passenden Vermögenswert.</p>'}`, buttons:[{t:"Fertig", fn:()=>{ delete S._offer; done(); }}]});
+  if(p.ai && !rows.length) return done();
+  modal({title:c.title, icon:f.i, color:f.c, body:`<p>${c.text}</p>${p.ai?`<p class="hint">🤖 ${p.name} hat diese Karte gezogen.</p>`:""}${rows.length?rows.join(""):'<p class="hint">Niemand besitzt einen passenden Vermögenswert.</p>'}`, buttons:[{t:"Fertig", fn:done}]});
 }
 function sellAsset(qi, id){
-  const q = S.players[qi], a = q.assets.find(x=>x.id===id), c = S._offer; if(!a||!c) return;
-  const o = c.offer(a), net = o - a.mortgage;
-  q.cash += net; q.assets = q.assets.filter(x=>x!==a);
-  log(`💰 ${q.name} verkauft ${a.name} für ${eur(o)} (netto ${eur(net)}).`);
-  showMarket(c); checkAll(); renderSheet(); save();
+  const q = S.players[qi], a = q.assets.find(x=>x.id===id), c = curCard; if(!a||!c) return;
+  doSellAsset(q,a,c.offer(a));
+  renderSheet(); save(); showMarket(c, true);
 }
 
 // ---------- Finanzen ----------
 function borrow(){
   const p = P();
   if(cashflow(p) - 10 < 0 || p.loan + 1000 > loanCap(p)){ modal({title:"Kein Kredit", body:`<p>Die Bank verleiht nur, wenn dein Cashflow danach positiv bleibt und dein Kreditrahmen (10 × Monatsgehalt = ${eur(loanCap(p))}) nicht überschritten wird.</p>`, buttons:[{t:"OK"}]}); return; }
-  p.loan += 1000; p.cash += 1000; log(`🏦 ${p.name} nimmt 1.000 € Kredit auf.`); render();
+  p.loan += 1000; p.cash += 1000; log(`🏦 ${nm(p)} nimmt 1.000 € Kredit auf.`); render();
 }
-function repay(){ const p = P(); if(p.cash<1000||p.loan<1000) return; p.loan-=1000; p.cash-=1000; log(`🏦 ${p.name} tilgt 1.000 € Kredit.`); checkAll(); render(); }
-function payDebt(k){
-  const p = P(), d = p.debts[k]; if(p.cash<d.debt) return;
-  p.cash -= d.debt; log(`✂️ ${p.name} tilgt ${k==="wohnen"?"die Hypothek":k==="auto"?"den Autokredit":k==="karte"?"die Kreditkarte":"den Studienkredit"} (${eur(d.debt)}) – ${eur(d.pay)} weniger Ausgaben.`);
-  d.debt=0; d.pay = k==="wohnen" ? 0 : 0; checkAll(); render();
+function repay(){ const p = P(); if(p.cash<1000||p.loan<1000) return; p.loan-=1000; p.cash-=1000; log(`🏦 ${nm(p)} tilgt 1.000 € Kredit.`); checkAll(); render(); }
+function doPayDebt(p,k){
+  const d = p.debts[k]; if(p.cash<d.debt) return;
+  p.cash -= d.debt; log(`✂️ ${nm(p)} tilgt ${k==="wohnen"?"die Hypothek":k==="auto"?"den Autokredit":k==="karte"?"die Kreditkarte":"den Studienkredit"} (${eur(d.debt)}) – ${eur(d.pay)} weniger Ausgaben.`);
+  d.debt=0; d.pay=0;
 }
+function payDebt(k){ doPayDebt(P(),k); checkAll(); render(); }
 
 // ---------- Sieg / Ende ----------
+function finish(p, how){
+  p.free = true; p.how = how; p.wonRound = S.round; S.winners = S.winners||[]; S.winners.push(p.name);
+  log(`🏆 ${nm(p)} gewinnt (${how}) – Platz ${S.winners.length} in Runde ${S.round}!`);
+  queueModal({title:S.winners.length===1?"Sieg!":"Ziel erreicht!", icon:"🏆", color:"#d9a62e",
+    body:`<p><b>${nm(p)}</b> hat es geschafft: <b>${how}</b>.</p><p>Platz <b>${S.winners.length}</b> in Runde ${S.round}.</p>`,
+    buttons:[{t:"Weiter", cls:"gold"}]});
+}
 function checkAll(){
   S.players.forEach(p=>{
     if(p.free||p.bankrupt) return;
-    const pas = passive(p);
-    if(pas>0 && pas >= expenses(p)*S.goal){
-      p.free = true; S.winners = (S.winners||[]); S.winners.push(p.name);
-      log(`🏆 ${p.name} ist aus dem Hamsterrad ausgebrochen! (Platz ${S.winners.length})`);
-      setTimeout(()=>modal({title:"Finanzielle Freiheit!", icon:"🏆", color:"#d9a62e",
-        body:`<p><b>${p.name}</b> hat es geschafft: Das passive Einkommen von <b>${eur(pas)}</b> deckt ${S.goal>1?"das Doppelte der":"die"} monatlichen Ausgaben (${eur(expenses(p))}).</p><p>Platz <b>${S.winners.length}</b> in Runde ${S.round}.</p>`,
-        buttons:[{t:"Weiter", cls:"gold"}]}), 50);
-    }
+    if(!p.fast){
+      const pas = passive(p);
+      if(pas>0 && pas >= expenses(p)*S.goal){
+        if(S.mode===2) enterFast(p);
+        else finish(p, "raus aus dem Hamsterrad");
+      }
+    } else if(p.fast.dreamBought) finish(p, `Traum erfüllt: ${dreamOf(p).i} ${dreamOf(p).n}`);
+    else if(p.fast.fc - p.fast.fcStart >= FAST_GOAL) finish(p, `Freiheits-Cashflow +${eur(FAST_GOAL)}`);
   });
   const active = S.players.filter(p=>!p.free&&!p.bankrupt);
-  if(!active.length) S.over = true;
+  const humans = S.players.filter(p=>!p.ai);
+  if(!S.over && (!active.length || (humans.length && !active.some(p=>!p.ai)))){
+    S.over = true; clearTimeout(aiTimer);
+    log("🏁 Spiel beendet.");
+    queueModal(resultsModal());
+  }
 }
+function score(p){
+  if(p.bankrupt) return -1;
+  if(p.fast) return 1000 + (p.fast.fc - p.fast.fcStart)/FAST_GOAL + p.cash/dreamOf(p).cost;
+  return passive(p)/Math.max(1,expenses(p)*S.goal);
+}
+function resultsModal(){
+  const done_ = (S.winners||[]).map(n=>S.players.find(p=>p.name===n));
+  const rest = S.players.filter(p=>!done_.includes(p)).sort((a,b)=>score(b)-score(a));
+  const rows = done_.concat(rest).map((p,i)=>{
+    let res;
+    if(p.free) res = `🏆 ${p.how} (Runde ${p.wonRound})`;
+    else if(p.bankrupt) res = "✖ insolvent";
+    else if(p.fast) res = `🌟 Freiheitsbahn: ${eur(p.cash)} bar, Cashflow ${eur(p.fast.fc)}`;
+    else res = `Hamsterrad: ${Math.round(score(p)*100)} % des Ausbruch-Ziels`;
+    return `<tr><td><b>${i+1}.</b></td><td><span class="tok" style="display:inline-block;background:${p.color};vertical-align:-2px"></span> ${nm(p)}</td><td>${res}</td></tr>`;
+  }).join("");
+  return {title:"Endergebnis", icon:"🏁", color:"#0f3d2e",
+    body:`<table class="results">${rows}</table><p class="hint" style="margin-top:10px">Gespielt: ${S.round} Runden.</p>`,
+    buttons:[{t:"Schließen", cls:"sec"},{t:"Neues Spiel", cls:"gold", fn:resetGame}]};
+}
+function showResults(){ modal(resultsModal()); }
 function endTurn(){
-  S.dice = S.dice.map(()=>0);
+  if(S.over){ render(); return; }
   const n = S.players.length;
-  if(S.players.every(p=>p.free||p.bankrupt)){ S.over=true; render(); return; }
   let i = S.cur;
   for(let guard=0; guard<n*4; guard++){
     i = (i+1)%n; if(i===0) S.round++;
     const q = S.players[i];
     if(q.free||q.bankrupt) continue;
-    if(q.skip>0){ q.skip--; log(`⏸️ ${q.name} setzt aus (noch ${q.skip}).`); continue; }
+    if(q.skip>0){ q.skip--; log(`⏸️ ${nm(q)} setzt aus (noch ${q.skip}).`); continue; }
     break;
   }
-  S.cur = i; S.phase="roll"; view = i; S.dice=[0]; setView("board"); render();
+  S.cur = i; S.phase="roll"; view = i; S.dice=[0];
+  if(!S.players[i].ai) setView("board");
+  render();
 }
 
 // ---------- Regeln ----------
 function rules(){
   modal({title:"Spielregeln", icon:"📖", body:`
-  <p><b>Ziel:</b> Baue so viel passives Einkommen (aus Immobilien, Unternehmen, Anleihen) auf, dass es deine monatlichen Ausgaben deckt – dann bist du raus aus dem Hamsterrad.</p>
+  <p><b>Ziel:</b> Baue passives Einkommen auf (Immobilien, Unternehmen, Anleihen), bis es deine monatlichen Ausgaben deckt – dann bist du raus aus dem Hamsterrad. Im Modus <b>Komplett</b> geht es danach auf der <b>Freiheitsbahn</b> weiter.</p>
+  <h3>Phase 1 – Hamsterrad</h3>
   <p><b>Zug:</b> Würfeln, Feld abhandeln, Zug beenden. Über ein 💶 <b>Zahltag</b>-Feld zu ziehen oder darauf zu landen bringt deinen monatlichen Cashflow.</p>
-  <p>💡 <b>Gelegenheit:</b> Wähle ein kleines oder großes Geschäft. Immobilien werden mit Eigenkapital + Darlehen gekauft; der angezeigte Cashflow ist bereits nach Darlehensrate. Aktien bringen keinen Cashflow – Gewinn nur durch Verkauf, wenn eine Karte einen besseren Kurs zeigt (alle Spieler dürfen dann verkaufen).</p>
-  <p>📈 <b>Markt:</b> Käufer machen Angebote. Jede Person mit passendem Objekt darf verkaufen – das Darlehen wird vom Erlös abgezogen.</p>
+  <p>💡 <b>Gelegenheit:</b> Kleines oder großes Geschäft. Immobilien werden mit Eigenkapital + Darlehen gekauft; der angezeigte Cashflow ist bereits nach Darlehensrate. Aktien bringen keinen Cashflow – Gewinn nur durch Verkauf, wenn eine Karte einen besseren Kurs zeigt (alle dürfen dann verkaufen).</p>
+  <p>📈 <b>Markt:</b> Käufer machen Angebote, jede Person mit passendem Objekt darf verkaufen – das Darlehen wird vom Erlös abgezogen. Außerdem Ereignisse wie Mietsteigerungen oder Aktiensplits.</p>
   <p>🛍️ <b>Konsum</b> kostet Geld, 👶 <b>Nachwuchs</b> erhöht die Ausgaben, 🤝 <b>Spende</b> erlaubt 3 Züge lang 2 Würfel, 📦 <b>Kündigung</b> kostet eine Monatsausgabe und 2 Runden Aussetzen.</p>
-  <p>🏦 <b>Kredit:</b> In 1.000-€-Schritten, Zinsen 1 % pro Monat (10 € je 1.000 €). Freiwillig nur bei positivem Cashflow und bis max. 10 × Monatsgehalt; reicht das Geld für Pflichtzahlungen nicht, wird automatisch Kredit aufgenommen. Konsumschulden kannst du jederzeit komplett tilgen, um Ausgaben zu senken.</p>
+  <p>🏦 <b>Kredit:</b> 1.000-€-Schritte, 1 % Zinsen pro Monat. Freiwillig nur bei positivem Cashflow und bis max. 10 × Monatsgehalt. Konsumschulden lassen sich jederzeit komplett tilgen.</p>
   <p>✖ <b>Insolvenz:</b> Kannst du einen negativen Zahltag nicht bezahlen, wird dein Vermögen zum halben Wert verkauft. Reicht das nicht, scheidest du aus.</p>
+  <h3>Phase 2 – Freiheitsbahn</h3>
+  <p>Du startest mit einem <b>Freiheits-Cashflow</b> von passivem Einkommen × ${FAST_MULT} und bekommst ihn einmal sofort als Startbonus. Kein Gehalt, keine Ausgaben mehr.</p>
+  <p>🏗️ <b>Investition:</b> Großprojekte gegen Bargeld, die deinen Freiheits-Cashflow erhöhen. 💰 <b>Geldfluss-Tag:</b> Freiheits-Cashflow kassieren. ⚡ <b>Risiko:</b> Klagen, Steuernachzahlungen oder Crashs kosten Geld oder Investitionen. 🎯 <b>Wagnis:</b> ${eur(WAGNIS_COST)} einsetzen, bei 5–6 gibt es ${eur(WAGNIS_WIN)}. 🤝 <b>Stiftung:</b> spenden für 3 Züge mit 2 Würfeln.</p>
+  <p>🏆 <b>Sieg:</b> Lande auf deinem 🌟 <b>Traumfeld</b> und kaufe deinen Traum – oder steigere deinen Freiheits-Cashflow um ${eur(FAST_GOAL)}.</p>
+  <h3>Computer-Gegner</h3>
+  <p>🤖 Computer spielen automatisch: Sie kaufen Geschäfte mit guter Rendite, verkaufen bei guten Angeboten und tilgen teure Schulden. Ist kein Mensch mehr im Rennen, endet das Spiel.</p>
   <p class="hint">Der Spielstand wird automatisch im Browser gespeichert.</p>`, buttons:[{t:"Los geht's", cls:"gold"}]});
 }
 
 $("#btnRules").onclick = rules;
-function resetGame(){ store.del(SAVE_KEY); S=null; renderSetup(); }
+function resetGame(){ clearTimeout(aiTimer); mq.length=0; closeModal(); store.del(SAVE_KEY); S=null; renderSetup(); }
 $("#btnNew").onclick = ()=>{
   if(!S || S.over) return resetGame();
   modal({title:"Neues Spiel?", body:"<p>Das aktuelle Spiel wird verworfen.</p>", buttons:[{t:"Abbrechen", cls:"sec"},{t:"Neu beginnen", cls:"red", fn:resetGame}]});
