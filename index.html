@@ -96,6 +96,9 @@ tr.tot td{font-weight:700;border-bottom:2px solid var(--ink)}
 .board.fastboard{background:linear-gradient(135deg,#f6e7b8,#e9c96b);padding:6px;border-radius:14px}
 .board.fastboard .center{background:#fffaf0}
 table.results td{padding:7px 4px;vertical-align:top}
+.rc{background:#fdf3d8;border-left:4px solid var(--accent);border-radius:8px;padding:8px 10px;font-size:13.5px;margin:8px 0}
+ul.rep{margin:4px 0 8px;padding-left:18px;font-size:14px} ul.rep li{margin:4px 0}
+.facts + .facts{margin-top:6px}
 .cmini{width:80%;max-width:220px}
 .cmini .bar{height:8px;margin-top:3px}
 /* Touch & Mobil */
@@ -244,6 +247,139 @@ const FAST_GOAL = 50000;   // Ziel B: Freiheits-Cashflow um diesen Betrag steige
 const FAST_MULT = 10;      // Startwert Freiheits-Cashflow = passives Einkommen × 10
 const WAGNIS_COST = 25000, WAGNIS_WIN = 250000;
 
+// ---------- Experten-Modus (realistischere Regeln) ----------
+const EX = {
+  nk:0.10,          // Kaufnebenkosten: Grunderwerbsteuer, Notar, Makler
+  reserve:0.0005,   // Instandhaltungsrücklage pro Monat (≈ 0,6 % des Kaufpreises pro Jahr)
+  insure:0.00015,   // Versicherungsprämie pro Monat in % der Immobilienwerte
+  rentCost:0.15,    // nicht umlagefähige Bewirtschaftungskosten in % der Miete
+  shortBind:15, longBind:40, longExtra:0.005,   // Zinsbindung in Runden, Aufschlag für lange Bindung
+  inflEvery:20,     // alle 20 Runden (≈ 1 Spieljahr) Inflation
+  vacancy:1/25, repair:1/30, failKlein:1/120, failGewerbe:1/200, stockTax:0.25,
+  rateMin:0.015, rateMax:0.07, rateStart:0.035,
+};
+const XP = () => !!(S && S.expert);
+const isProp = a => ["wohnung","haus","garage","gewerbe"].includes(a.cat);
+const pct = r => (r*100).toFixed(1).replace(".",",")+" %";
+function taxRate(p){ const s = PROFS[p.prof].salary; return s<3500?0.25 : s<4500?0.30 : s<7000?0.37 : 0.42; }
+// Vermögenswerte im Experten-Modus mit realistischem Mietmodell versehen
+function expertize(c){
+  if(c.kind!=="asset") return c;
+  if(c.cat==="anleihe"){ c.cf = Math.max(5, Math.round(c.price*0.0025/5)*5); c.text = "Sichere Anleihe mit rund 3 % Zinsen pro Jahr. Kann nicht weiterverkauft werden."; return c; }
+  if(c.cat==="klein"){ c.cf = Math.round(c.price*pick([0.012,0.016,0.02,0.025])/5)*5; c.risk = true; return c; }
+  let y2 = 0;
+  const y0 = c.cat==="gewerbe" ? pick([0.07,0.08,0.09,0.1]) : c.cat==="haus" ? pick([0.06,0.065,0.07,0.075,0.08,0.085]) : pick([0.055,0.06,0.065,0.07,0.075,0.08]);
+  // Schnäppchen: Zwangsversteigerung / Sanierungsfall unter Marktwert
+  if((c.cat==="wohnung"||c.cat==="haus") && Math.random()<0.35){
+    y2 = pick([0.09,0.1,0.11]);
+    c.title = "Zwangsversteigerung: " + c.title.replace(" zu verkaufen","");
+    c.text = "Unter Marktwert ersteigert – solche Schnäppchen sind selten und oft mit Sanierungsstau verbunden. Hier entsteht die Rendite beim Einkauf.";
+  }
+  // Banken verlangen für größere Objekte rund 20 % Eigenkapital (plus Nebenkosten); Wohnungen oft bis 90 % finanziert
+  if(c.cat==="haus"||c.cat==="gewerbe") c.down = Math.max(c.down, Math.round(c.price*0.2/1000)*1000);
+  const y = y2 || y0;
+  c.rent = Math.round(c.price*y/12/10)*10;
+  c.costs = Math.round(c.rent*EX.rentCost/5)*5;
+  c.nk = Math.round(c.price*EX.nk/500)*500;
+  c.expert = true; if(c.cat==="gewerbe") c.risk = true;
+  return c;
+}
+// Cashflow vor Steuern je nach Zinsbindung
+function exCf(c, long){ const rate = S.rate + (long?EX.longExtra:0); return Math.round((c.rent - c.costs - (c.price-c.down)*rate/12)/5)*5; }
+// Netto-Cashflow eines Objekts: nach Rücklage und Steuer (Steuer erst nach Abschreibung)
+function exNet(c, cf, tr){
+  const afa = c.price*0.8*0.02/12, res = c.price*EX.reserve;
+  return Math.round(cf - res - Math.max(0, cf - afa)*tr);
+}
+// Monatliche Zusatzkosten im Experten-Modus
+function exExtras(p){
+  if(!XP() || p.fast) return {tax:0,res:0,ins:0,afa:0};
+  const props = p.assets.filter(isProp);
+  const afa = props.reduce((s,a)=>s+a.price*0.8*0.02/12,0);   // Abschreibung: 2 % p.a. auf den Gebäudeanteil (80 %)
+  return {
+    afa: Math.round(afa),
+    tax: Math.round(Math.max(0, passive(p) - afa)*taxRate(p)),
+    res: props.reduce((s,a)=>s+Math.round(a.price*EX.reserve),0),
+    ins: p.insured ? Math.round(props.reduce((s,a)=>s+a.price,0)*EX.insure) : 0,
+  };
+}
+const netPassive = p => { const x = exExtras(p); return passive(p) - x.tax - x.res - x.ins; };
+function smallDeal(){ const c = smallDealBase(); return XP() ? expertize(c) : c; }
+function bigDeal(){ const c = bigDealBase(); return XP() ? expertize(c) : c; }
+function marketCard(){ return XP() ? exMarket() : marketBase(); }
+function exMarket(){
+  const r = Math.random();
+  if(r<0.22){ const f = pick([0.9,1,1.1,1.2,1.3,1.4]); return {kind:"offer", cat:"wohnung", title:"Käufer sucht Eigentumswohnung", text:`Eine Familie bietet das ${String(f).replace(".",",")}-fache des damaligen Kaufpreises für eine Eigentumswohnung.`, offer:a=>Math.round(a.price*f/1000)*1000}; }
+  if(r<0.36){ const f = pick([0.95,1.05,1.15,1.25,1.35]); return {kind:"offer", cat:"haus", title:"Investor kauft Mehrfamilienhäuser", text:`Angebot: das ${String(f).replace(".",",")}-fache des damaligen Kaufpreises.`, offer:a=>Math.round(a.price*f/1000)*1000}; }
+  if(r<0.44){ const f = pick([1.5,2,2.5,3]); return {kind:"offer", cat:"klein", title:"Übernahmeangebot für Kleinunternehmen", text:`Ein Konkurrent zahlt das ${String(f).replace(".",",")}-fache des Kaufpreises.`, offer:a=>Math.round(a.price*f)}; }
+  if(r<0.52){ const f = pick([1,1.15,1.3,1.5]); return {kind:"offer", cat:"gewerbe", title:"Fonds kauft Gewerbeobjekte", text:`Angebot: das ${String(f).replace(".",",")}-fache des Kaufpreises.`, offer:a=>Math.round(a.price*f/1000)*1000}; }
+  if(r<0.57){ const f = pick([1,1.2,1.4]); return {kind:"offer", cat:"garage", title:"Nachbar will Garagen kaufen", text:`Angebot: das ${String(f).replace(".",",")}-fache des Kaufpreises.`, offer:a=>Math.round(a.price*f/500)*500}; }
+  // Zinsänderungen: zufällig, aber mit leichtem Zug zurück zur Mitte (~3,5 %)
+  if(r<0.73){ const up = Math.random() < (S.rate<0.035 ? 0.65 : S.rate>0.045 ? 0.35 : 0.5);
+    return up ? {kind:"event", title:"Zinswende: Zinsen steigen", text:"Die Notenbank erhöht die Leitzinsen. Der Marktzins für neue Darlehen und Anschlussfinanzierungen steigt um 0,75 Prozentpunkte.", ev:"zins", d:0.0075}
+              : {kind:"event", title:"Zinssenkung", text:"Die Konjunktur schwächelt, die Zinsen sinken um 0,75 Prozentpunkte. Gut für alle, deren Zinsbindung bald ausläuft.", ev:"zins", d:-0.0075}; }
+  if(r<0.77){ const t = pick(TICKERS); return {kind:"event", title:`Gewinnwarnung: ${t.n}`, text:`${t.n} (${t.t}) senkt die Prognose. Wer die Aktie hält, behält sie – aber der Markt ist nervös. Kursschwankungen gehören dazu.`, ev:"none"}; }
+  if(r<0.85) return {kind:"event", title:"Mietspiegel steigt", text:"Alle Mieten steigen um 3 % (alle Spieler).", ev:"miete3"};
+  if(r<0.93){ const t = pick(TICKERS); return {kind:"event", title:`Insolvenz: ${t.n}`, text:`${t.n} (${t.t}) ist pleite. Die Aktie ist wertlos – wer sie hält, verliert alles. Deshalb: streuen!`, ev:"insolvenz", ticker:t.t}; }
+  const t = pick(TICKERS).t;
+  return {kind:"event", title:"Aktiensplit 2:1", text:`Die Aktie ${t} wird gesplittet – alle Besitzer haben doppelt so viele Stücke.`, ev:"split", ticker:t};
+}
+// Ereignisse beim Zahltag (Leerstand, Reparaturen, Zinsbindung, Pleiten)
+function exPayday(p){
+  const msgs = [];
+  p.reserve = (p.reserve||0) + exExtras(p).res;
+  for(const a of [...p.assets]){
+    if(isProp(a)){
+      if(a.mortgage>0 && a.fixedUntil && S.round>=a.fixedUntil){
+        const old = a.rate ?? S.rate, d = Math.round(a.mortgage*(S.rate-old)/12);
+        a.cf -= d; a.rate = S.rate; a.fixedUntil = S.round + EX.shortBind;
+        msgs.push(`🏦 Zinsbindung für ${a.name} ausgelaufen: Anschlusszins ${pct(S.rate)} statt ${pct(old)} → Cashflow ${d>0?"−":"+"}${eur(Math.abs(d))}/Monat.`);
+      }
+      if(Math.random()<EX.vacancy){
+        const u = a.units||1, lost = Math.round((a.rent||Math.max(100,a.cf))/u*Math.max(1,Math.ceil(u/4)));
+        if(p.insured) msgs.push(`🏚️ Leerstand in ${a.name}: ${eur(lost)} Mietausfall – übernimmt die Versicherung.`);
+        else { pay(p,lost,"Leerstand"); msgs.push(`🏚️ Leerstand in ${a.name}: ${eur(lost)} Mietausfall.`); }
+      }
+      if(Math.random()<EX.repair){
+        const cost = Math.round(a.price*pick([0.01,0.015,0.02,0.03])/100)*100, what = pick(["Heizung","Dach","Fenster","Wasserschaden","Fassade","Elektrik"]);
+        const fromRes = Math.min(p.reserve||0, cost); p.reserve -= fromRes; let rest = cost-fromRes;
+        let t = `🔧 Reparatur an ${a.name} (${what}): ${eur(cost)}`;
+        if(fromRes) t += `, davon ${eur(fromRes)} aus der Rücklage`;
+        if(rest>0 && p.insured && cost>=a.price*0.02){ t += `, Rest ${eur(rest)} zahlt die Versicherung`; rest = 0; }
+        if(rest>0){ pay(p,rest,"Reparatur"); t += `, ${eur(rest)} aus eigener Tasche`; }
+        msgs.push(t+".");
+      }
+    }
+    if(a.cat==="klein" && p.assets.includes(a) && Math.random()<EX.failKlein){
+      p.assets = p.assets.filter(x=>x!==a);
+      msgs.push(`💥 ${a.name} ist gescheitert – Totalverlust von ${eur(a.price)}.`);
+    }
+    if(a.cat==="gewerbe" && p.assets.includes(a) && Math.random()<EX.failGewerbe){
+      p.assets = p.assets.filter(x=>x!==a);
+      const rest = Math.round(a.price*0.6) - a.mortgage;   // Zwangsverkauf zu 60 %
+      if(rest>=0) p.cash += rest; else p.loan += Math.ceil(-rest/1000)*1000;
+      msgs.push(`💥 ${a.name} ist pleite und wird für ${eur(a.price*0.6)} zwangsverkauft – ${rest>=0?`dir bleiben ${eur(rest)}`:`das Darlehen ist nicht gedeckt, ${eur(-rest)} bleiben als Bankkredit`}.`);
+    }
+  }
+  msgs.forEach(m=>log(`${nm(p)}: ${m}`));
+  if(!p.ai) S.report = (S.report||[]).concat(msgs);
+}
+function takeReport(){ const r = S.report||[]; S.report = []; return r.length ? `<h3>Beim Zahltag passiert</h3><ul class="rep">${r.map(m=>`<li>${m}</li>`).join("")}</ul>` : ""; }
+function withReport(p, next){
+  if(p.ai || !(S.report&&S.report.length)){ S.report = []; return next(); }
+  modal({title:"Zahltag-Bericht", icon:"📋", color:"#2e7d32", body: takeReport() + `<div class="rc">💡 <b>Realitäts-Check:</b> Leerstand, Reparaturen und auslaufende Zinsbindungen gehören zum Alltag von Vermietern. Rücklage, Versicherung und eine kluge Zinsbindung federn das ab.</div>`, buttons:[{t:"Weiter", fn:next}]});
+}
+function inflation(){
+  S.players.forEach(p=>{ if(p.bankrupt||p.fast) return;
+    p.infl = (p.infl||1)*1.025; p.salF = (p.salF||1)*1.02;
+    p.assets.forEach(a=>{ if(a.rent){ const d = Math.round(a.rent*0.02); a.rent += d; a.cf += d; } });
+  });
+  log("📉 Inflation: Lebenshaltung +2,5 %, Gehälter +2 %, Mieten +2 %.");
+  if(S.players.some(p=>!p.ai && !p.fast && !p.free && !p.bankrupt)) queueModal({title:"Inflation", icon:"📉", color:"#455a64",
+    body:`<p>Ein Jahr ist vergangen. Die Preise steigen:</p><div class="facts"><span>Lebenshaltung, Kinder, Miete</span><span class="neg">+2,5 %</span><span>Gehalt</span><span>+2 %</span><span>Mieteinnahmen deiner Immobilien</span><span class="pos">+2 %</span></div><div class="rc">💡 <b>Realitäts-Check:</b> Bargeld verliert durch Inflation an Kaufkraft und Gehälter ziehen oft langsamer nach. Sachwerte mit steigenden Mieten gleichen das teilweise aus.</div>`,
+    buttons:[{t:"Verstanden"}]});
+}
+
 function ringPos(i){ // 7x7 Rand
   if(i<=6) return [1, i+1];
   if(i<=12) return [i-5, 7];
@@ -258,7 +394,7 @@ const TICKERS = [
 ];
 const STOCK_PRICES = [1,5,5,10,10,10,15,20,20,25,30,40];
 
-function smallDeal(){
+function smallDealBase(){
   const r = Math.random();
   if(r<0.38){
     const s = pick(TICKERS), price = pick(STOCK_PRICES);
@@ -287,7 +423,7 @@ function smallDeal(){
   const price = step(2000,7000,500);
   return {kind:"asset", cat:"klein", title:"Kleinunternehmen: "+b[0], text:b[1], name:b[0], price, down:price, cf:step(150,450,25)};
 }
-function bigDeal(){
+function bigDealBase(){
   const r = Math.random();
   if(r<0.55){
     const units = pick([3,4,4,6,8,10,12]), per = step(60000,90000,5000), price = units*per;
@@ -300,7 +436,7 @@ function bigDeal(){
   const cf = Math.round(price*pick([0.01,0.012,0.014,0.016])/50)*50;
   return {kind:"asset", cat:"gewerbe", title:g[0]+" zu verkaufen", text:"Etabliertes Geschäft mit Bilanzen der letzten drei Jahre.", name:g[0], price, down, cf};
 }
-function marketCard(){
+function marketBase(){
   const r = Math.random();
   if(r<0.25) { const o = step(70000,130000,5000); return {kind:"offer", cat:"wohnung", title:"Käufer sucht Eigentumswohnung", text:`Eine Familie bietet ${eur(o)} für eine Eigentumswohnung. Jede Person mit einer Wohnung darf verkaufen.`, offer:()=>o}; }
   if(r<0.45) { const per = step(80000,125000,5000); return {kind:"offer", cat:"haus", title:"Investor kauft Mehrfamilienhäuser", text:`Zahlt ${eur(per)} pro Wohneinheit.`, offer:a=>per*a.units, per}; }
@@ -346,17 +482,23 @@ function newPlayer(name, pi, color, dream, ai){
   const p = PROFS[pi];
   return {name, prof:pi, color, dream, ai, cash:p.savings, children:0, loan:0, pos:0, skip:0, charity:0, free:false, bankrupt:false, fast:null,
     debts:{wohnen:{pay:p.wohnen[0],debt:p.wohnen[1]}, auto:{pay:p.auto[0],debt:p.auto[1]}, karte:{pay:p.karte[0],debt:p.karte[1]}, studium:{pay:p.studium[0],debt:p.studium[1]}},
-    assets:[], stocks:{}};
+    assets:[], stocks:{}, reserve:0, insured:false, infl:1, salF:1};
 }
 const P = () => S.players[S.cur];
 const passive = p => p.assets.reduce((s,a)=>s+a.cf,0);
 const loanPay = p => Math.round(p.loan/100); // 1 % pro Monat
 const loanCap = p => PROFS[p.prof].salary*10;  // freiwilliger Kreditrahmen
-function expenses(p){
-  const pr = PROFS[p.prof];
-  return pr.tax + p.debts.wohnen.pay + p.debts.auto.pay + p.debts.karte.pay + p.debts.studium.pay + pr.sonst + p.children*pr.kind + loanPay(p);
+// Grundwerte inkl. Inflation (nur im Experten-Modus ≠ 1)
+function base(p){
+  const pr = PROFS[p.prof], s = p.salF||1, f = p.infl||1;
+  return {salary:Math.round(pr.salary*s), tax:Math.round(pr.tax*s), sonst:Math.round(pr.sonst*f), kind:Math.round(pr.kind*f),
+          wohnen: p.debts.wohnen.debt>0 ? p.debts.wohnen.pay : Math.round(p.debts.wohnen.pay*f)};
 }
-const income = p => PROFS[p.prof].salary + passive(p);
+function expenses(p){
+  const b = base(p), x = exExtras(p);
+  return b.tax + b.wohnen + p.debts.auto.pay + p.debts.karte.pay + p.debts.studium.pay + b.sonst + p.children*b.kind + loanPay(p) + x.tax + x.res + x.ins;
+}
+const income = p => base(p).salary + passive(p);
 const cashflow = p => income(p) - expenses(p);
 const dreamOf = p => DREAMS[p.dream] || DREAMS[0];
 const nm = p => (p.ai?"🤖 ":"") + p.name;
@@ -397,6 +539,12 @@ function renderSetup(){
     <h2 style="margin-top:0">Neues Spiel</h2>
     <p class="hint">1–4 Mitspieler an einem Gerät – Menschen und/oder Computer (🤖 anhaken). Leere Namen spielen nicht mit.</p>
     ${rows}
+    <h3>Schwierigkeit</h3>
+    <select id="diff" style="width:100%">
+      <option value="n">Normal: vereinfachte Zahlen – ideal zum Lernen des Prinzips</option>
+      <option value="x">Experte: Steuern, Nebenkosten, Leerstand, Zinsen, Inflation, Pleiten</option>
+    </select>
+    <p class="hint" id="diffHint" style="margin:4px 0 0"></p>
     <h3>Spielmodus</h3>
     <select id="mode" style="width:100%">
       <option value="2">Komplett: Hamsterrad ➜ Freiheitsbahn ➜ Traum erfüllen</option>
@@ -412,6 +560,10 @@ function renderSetup(){
       <button class="gold" id="btnStart">Spiel starten</button>
     </div></div>`;
   $("#btnStart").onclick = startGame;
+  const dh = ()=>{ $("#diffHint").textContent = $("#diff").value==="x"
+    ? "Für Fortgeschrittene: realistische Renditen, 10 % Kaufnebenkosten, Steuern auf Erträge, Instandhaltungsrücklage, Leerstand & Reparaturen, Zinsbindung mit Zinsänderungen, Inflation und echte Totalverluste. Dauert deutlich länger."
+    : "Einsteiger: großzügige Renditen, keine Steuern und Nebenkosten – zeigt das Prinzip in kurzer Zeit."; };
+  $("#diff").onchange = dh; dh();
   if(saved) $("#btnCont").onclick = ()=>{ S = JSON.parse(saved); view = S.cur; showGame(); };
 }
 function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
@@ -432,8 +584,9 @@ function startGame(){
   }
   if(!players.length){ modal({title:"Keine Spieler", body:"<p>Bitte mindestens einen Namen eingeben.</p>", buttons:[{t:"OK"}]}); return; }
   S = {players, cur:0, goal:+$("#goal").value, mode:+$("#mode").value, phase:"roll", dice:[0], log:[], round:1, over:false,
-       dreamFields: buildDreamFields(players), winners:[]};
+       dreamFields: buildDreamFields(players), winners:[], expert: $("#diff").value==="x", rate: EX.rateStart, report:[]};
   players.forEach(p=>log(`${nm(p)} startet als ${PROFS[p.prof].n} mit ${eur(p.cash)} – Traum: ${dreamOf(p).i} ${dreamOf(p).n}.`));
+  if(S.expert) log(`🎓 Experten-Modus: Marktzins ${pct(S.rate)}, Kaufnebenkosten 10 %, Steuern, Leerstand, Inflation & Co. sind aktiv.`);
   view = 0; showGame();
 }
 function showGame(){ $("#setup").classList.add("hidden"); $("#game").classList.remove("hidden"); $("#mnav").classList.remove("hidden"); setView("board"); render(); }
@@ -489,7 +642,7 @@ function renderBoard(){
       <div class="cmini hint">Passiv ${eur(passive(p))} von ${eur(expenses(p)*S.goal)}${bar(passive(p)/(expenses(p)*S.goal)*100)}</div>`;
   }
   h += `<div class="center">
-    <div class="hint">Runde ${S.round}${fast?" · <b style=\"color:#a87800\">Freiheitsbahn</b>":""}</div>
+    <div class="hint">Runde ${S.round}${fast?" · <b style=\"color:#a87800\">Freiheitsbahn</b>":""}${XP()?` · 🎓 Experte · Zins <b>${pct(S.rate)}</b>`:""}</div>
     <h2><span class="tok" style="display:inline-block;background:${p.color};vertical-align:-1px"></span> ${nm(p)}</h2>
     ${info}
     <div class="dice">${dice}</div>
@@ -525,14 +678,19 @@ function renderSheet(){
       <table>${inv||'<tr><td class="hint">Noch keine – Investitionsfelder bringen zusätzlichen Cashflow.</td></tr>'}</table>`;
     return;
   }
-  const pas = passive(p), exp = expenses(p), goal = exp*S.goal;
+  const pas = passive(p), exp = expenses(p), goal = exp*S.goal, b = base(p), x = exExtras(p);
   const dl = {wohnen:p.debts.wohnen.debt>0?"Hypothek Eigenheim":"Miete", auto:"Autokredit", karte:"Kreditkarte", studium:"Studienkredit"};
-  let expRows = `<tr><td>Steuern & Abgaben</td><td class="r">${eur(pr.tax)}</td></tr>`;
-  for(const k of ["wohnen","auto","karte","studium"]) if(p.debts[k].pay>0) expRows += `<tr><td>${dl[k]}</td><td class="r">${eur(p.debts[k].pay)}</td></tr>`;
-  expRows += `<tr><td>Lebenshaltung</td><td class="r">${eur(pr.sonst)}</td></tr>`;
-  if(p.children) expRows += `<tr><td>Kinder (${p.children} × ${eur(pr.kind)})</td><td class="r">${eur(p.children*pr.kind)}</td></tr>`;
+  let expRows = `<tr><td>Steuern & Abgaben (Gehalt)</td><td class="r">${eur(b.tax)}</td></tr>`;
+  for(const k of ["wohnen","auto","karte","studium"]) if(p.debts[k].pay>0) expRows += `<tr><td>${dl[k]}</td><td class="r">${eur(k==="wohnen"?b.wohnen:p.debts[k].pay)}</td></tr>`;
+  expRows += `<tr><td>Lebenshaltung</td><td class="r">${eur(b.sonst)}</td></tr>`;
+  if(p.children) expRows += `<tr><td>Kinder (${p.children} × ${eur(b.kind)})</td><td class="r">${eur(p.children*b.kind)}</td></tr>`;
   if(p.loan) expRows += `<tr><td>Bankkredit (1 %/Monat)</td><td class="r">${eur(loanPay(p))}</td></tr>`;
-  let assetRows = p.assets.map(a=>`<tr><td>${a.name}<br><span class="hint">Kauf ${eur(a.price)}${a.mortgage?` · Darlehen ${eur(a.mortgage)}`:""}</span></td><td class="r ${a.cf>=0?"pos":"neg"}">${eur(a.cf)}/M</td></tr>`).join("");
+  if(XP()){
+    if(x.tax) expRows += `<tr><td>Steuer auf Erträge (${Math.round(taxRate(p)*100)} %)</td><td class="r">${eur(x.tax)}</td></tr>`;
+    if(x.res) expRows += `<tr><td>Instandhaltungsrücklage</td><td class="r">${eur(x.res)}</td></tr>`;
+    if(x.ins) expRows += `<tr><td>Versicherung</td><td class="r">${eur(x.ins)}</td></tr>`;
+  }
+  let assetRows = p.assets.map(a=>`<tr><td>${a.name}<br><span class="hint">Kauf ${eur(a.price)}${a.mortgage?` · Darlehen ${eur(a.mortgage)}`:""}${a.rate!=null&&a.mortgage?` · Zins ${pct(a.rate)} bis Runde ${a.fixedUntil}`:""}${a.rent?` · Miete ${eur(a.rent)}`:""}</span></td><td class="r ${a.cf>=0?"pos":"neg"}">${eur(a.cf)}/M</td></tr>`).join("");
   for(const [t,s] of Object.entries(p.stocks)) assetRows += `<tr><td>${s.qty.toLocaleString("de-DE")} × ${t}<br><span class="hint">Ø ${eur(s.cost/s.qty)} je Aktie</span></td><td class="r">–</td></tr>`;
   let debtRows = "";
   for(const k of ["wohnen","auto","karte","studium"]) if(p.debts[k].debt>0)
@@ -547,7 +705,7 @@ function renderSheet(){
     <div class="row" style="justify-content:space-between;font-size:14px"><span>Passiv: <b>${eur(pas)}</b></span><span>Ziel: <b>${eur(goal)}</b></span></div>
     ${bar(pas/goal*100)}
     <h3>Einnahmen</h3>
-    <table><tr><td>Gehalt</td><td class="r">${eur(pr.salary)}</td></tr>
+    <table><tr><td>Gehalt</td><td class="r">${eur(b.salary)}</td></tr>
       <tr><td>Passives Einkommen</td><td class="r">${eur(pas)}</td></tr>
       <tr class="tot"><td>Gesamt</td><td class="r">${eur(income(p))}</td></tr></table>
     <h3>Ausgaben</h3>
@@ -556,7 +714,12 @@ function renderSheet(){
     <table>${assetRows||'<tr><td class="hint">Noch keine – nutze Gelegenheiten!</td></tr>'}</table>
     <h3>Verbindlichkeiten</h3>
     <table>${debtRows||'<tr><td class="hint">Schuldenfrei 🎉</td></tr>'}</table>
-    ${isCur?`<div class="row" style="margin-top:10px"><button class="sm" onclick="borrow()">Kredit +1.000 €</button><span class="hint">nur bei positivem Cashflow</span></div>`:""}`;
+    ${isCur?`<div class="row" style="margin-top:10px"><button class="sm" onclick="borrow()">Kredit +1.000 €</button><span class="hint">nur bei positivem Cashflow</span></div>`:""}
+    ${XP()?`<h3>Absicherung (Experte)</h3>
+      <table><tr><td>Rücklagenkonto<br><span class="hint">deckt Reparaturen zuerst</span></td><td class="r">${eur(p.reserve||0)}</td></tr>
+      <tr><td>Versicherung<br><span class="hint">Mietausfall + Großschäden ab 2 % des Werts</span></td><td class="r">${p.insured?"✅ aktiv":"—"}</td></tr></table>
+      ${isCur?`<div class="row" style="margin-top:8px"><button class="sm ${p.insured?"sec":""}" onclick="toggleInsure()">${p.insured?"Versicherung kündigen":"Versicherung abschließen"}</button><span class="hint">Prämie ≈ ${eur(Math.round(p.assets.filter(isProp).reduce((s,a)=>s+a.price,0)*EX.insure))}/Monat</span></div>`:""}
+      <p class="hint" style="margin-top:6px">Marktzins aktuell: <b>${pct(S.rate)}</b> · Steuersatz: <b>${Math.round(taxRate(p)*100)} %</b> · Inflation seit Start: <b>+${(((p.infl||1)-1)*100).toFixed(1).replace(".",",")} %</b></p>`:""}`;
 }
 
 // ---------- Dialoge ----------
@@ -592,13 +755,23 @@ function aiManage(p){
   for(const k of ["karte","auto","studium","wohnen"]){
     const d = p.debts[k]; if(d.debt>0 && p.cash >= d.debt + 2000) doPayDebt(p,k);
   }
-  while(p.loan>=1000 && p.cash >= 9000){ p.loan-=1000; p.cash-=1000; }
+  while(p.loan>=1000 && p.cash >= (XP()?4000:9000)){ p.loan-=1000; p.cash-=1000; }
+  if(XP() && !p.insured && p.assets.filter(isProp).length>=2){ p.insured = true; log(`🛡️ ${nm(p)} schließt eine Versicherung ab.`); }
 }
 function aiWantsAsset(p,c){
   if(c.cf<=0 || c.cf*12/c.down < 0.12) return false;
   if(p.cash>=c.down) return true;
   const need = Math.ceil((c.down-p.cash)/1000)*1000;   // Rest per Kredit – wie bei Menschen
   return c.cf - need/100 >= 50 && cashflow(p) + c.cf - need/100 >= 0 && p.loan + need <= loanCap(p);
+}
+// Experte: Netto-Rechnung nach Steuern und Rücklage, Eigenkapital inkl. Nebenkosten
+function aiExpertChoice(p,c){
+  const long = S.rate < 0.045;   // bei niedrigen Zinsen lang binden
+  const cf = exCf(c,long), net = exNet(c, cf, taxRate(p)), eq = c.down + c.nk;
+  if(cf<=0 || net<=0 || net*12/eq < 0.04) return null;
+  if(p.cash >= eq + 1000) return long;
+  const need = Math.ceil((eq-p.cash)/1000)*1000;
+  return (need <= 10000 && net - need/100 >= 60 && cashflow(p) + cf - need/100 >= 0 && p.loan + need <= loanCap(p)) ? long : null;
 }
 
 // ---------- Zugablauf ----------
@@ -617,13 +790,14 @@ function roll(n){
   }
   S.phase="resolve"; render();
   document.querySelectorAll(".die").forEach(x=>x.classList.add("roll"));
-  setTimeout(()=> p.fast ? resolveFast(p) : resolveField(p), 380);
+  setTimeout(()=> p.fast ? resolveFast(p) : withReport(p, ()=>resolveField(p)), 380);
 }
 function payday(p){
   const cf = cashflow(p);
-  if(cf>=0){ p.cash += cf; log(`💶 Zahltag für ${nm(p)}: +${eur(cf)}.`); return; }
-  if(p.cash >= -cf){ p.cash += cf; log(`⚠️ Zahltag für ${nm(p)}: ${eur(cf)} (negativer Cashflow).`); return; }
-  liquidate(p, -cf);
+  if(cf>=0){ p.cash += cf; log(`💶 Zahltag für ${nm(p)}: +${eur(cf)}.`); }
+  else if(p.cash >= -cf){ p.cash += cf; log(`⚠️ Zahltag für ${nm(p)}: ${eur(cf)} (negativer Cashflow).`); }
+  else { liquidate(p, -cf); if(p.bankrupt) return; }
+  if(XP() && !p.fast) exPayday(p);
 }
 function fastPayday(p){ p.cash += p.fast.fc; log(`💰 Geldfluss-Tag für ${nm(p)}: +${eur(p.fast.fc)}.`); }
 function liquidate(p, need){
@@ -647,9 +821,9 @@ function info(p, f, title, body, btn="Weiter"){
 }
 function resolveField(p){
   const t = BOARD[p.pos], f = FT[t];
-  if(t==="zahltag"){ payday(p); return info(p, f, "Zahltag", `<p>Dein monatlicher Cashflow von <b>${eur(cashflow(p))}</b> wird verbucht.</p>`); }
+  if(t==="zahltag"){ const cf = cashflow(p); payday(p); return info(p, f, "Zahltag", `<p>Dein monatlicher Cashflow von <b>${eur(cf)}</b> wird verbucht.</p>${XP()?takeReport():""}`); }
   if(t==="chance"){
-    if(p.ai) return showDeal(p.cash>=40000 ? bigDeal() : smallDeal());
+    if(p.ai) return showDeal(p.cash>=(XP()?80000:40000) ? bigDeal() : smallDeal());
     return modal({title:"Gelegenheit", icon:f.i, color:f.c,
       body:`<p>Welche Art von Geschäft suchst du?</p><div class="facts"><span>Kleines Geschäft</span><span>bis ca. 7.000 €</span><span>Großes Geschäft</span><span>ab ca. 7.000 € Eigenkapital</span></div><p class="hint">Bargeld: ${eur(p.cash)}</p>`,
       buttons:[{t:"Kleines Geschäft", fn:()=>showDeal(smallDeal())},{t:"Großes Geschäft", cls:"gold", fn:()=>showDeal(bigDeal())}]});
@@ -691,7 +865,7 @@ function resolveFast(p){
   if(t==="invest"){
     const c = fastInvest();
     const buy = ()=>{ p.cash -= c.cost; p.fast.invests.push(c); p.fast.fc += c.fc; log(`🏗️ ${nm(p)} investiert ${eur(c.cost)} in ${c.name}: +${eur(c.fc)} Freiheits-Cashflow.`); };
-    if(p.ai){ if(p.cash>=c.cost) buy(); else log(`🤖 ${nm(p)} kann sich ${c.name} (${eur(c.cost)}) nicht leisten.`); return done(); }
+    if(p.ai){ if(p.cash>=c.cost) buy(); else log(`${nm(p)} kann sich ${c.name} (${eur(c.cost)}) nicht leisten.`); return done(); }
     return modal({title:"Großinvestition: "+c.name, icon:c.icon, color:f.c,
       body:`<div class="facts"><span>Kaufpreis (nur bar)</span><span>${eur(c.cost)}</span><span>Zusätzlicher Freiheits-Cashflow</span><span class="pos">+${eur(c.fc)}</span><span>Rendite</span><span>${(c.fc/c.cost*100).toFixed(0)} % pro Geldfluss-Tag</span></div><p class="hint">Dein Bargeld: ${eur(p.cash)}</p>`,
       buttons:[{t:"Ablehnen", cls:"sec", fn:done},{t:"Investieren", cls:"gold", dis:p.cash<c.cost, fn:()=>{ buy(); done(); }}]});
@@ -703,7 +877,7 @@ function resolveFast(p){
       return info(p, f, `${d.i} ${d.n}`, `<p>Ein schöner Traum – aber nicht deiner${who?` (sondern von ${who})`:""}. Nichts passiert.</p>`);
     }
     const buy = ()=>{ p.cash -= d.cost; p.fast.dreamBought = true; log(`🌟 ${nm(p)} erfüllt sich den Traum: ${d.i} ${d.n}!`); };
-    if(p.ai){ if(p.cash>=d.cost) buy(); else log(`🤖 ${nm(p)} steht vor dem Traum, hat aber erst ${eur(p.cash)}.`); return done(); }
+    if(p.ai){ if(p.cash>=d.cost) buy(); else log(`${nm(p)} steht vor dem Traum, hat aber erst ${eur(p.cash)}.`); return done(); }
     return modal({title:`Dein Traum: ${d.n}`, icon:d.i, color:f.c,
       body:`<p>Du stehst vor deinem Lebenstraum! Wenn du ihn jetzt bezahlst, hast du das Spiel gewonnen.</p><div class="facts"><span>Preis</span><span>${eur(d.cost)}</span><span>Dein Bargeld</span><span>${eur(p.cash)}</span></div>`,
       buttons:[{t:p.cash<d.cost?"Noch zu teuer":"Später", cls:"sec", fn:done},{t:"Traum kaufen 🌟", cls:"gold", dis:p.cash<d.cost, fn:()=>{ buy(); done(); }}]});
@@ -733,7 +907,7 @@ function resolveFast(p){
   }
 }
 function enterFast(p){
-  const fc = passive(p)*FAST_MULT;
+  const fc = Math.max(1000, netPassive(p))*FAST_MULT;
   p.fast = {fc, fcStart:fc, pos:0, invests:[], dreamBought:false};
   p.cash += fc; p.charity = 0; p.skip = 0;
   log(`🚀 ${nm(p)} ist aus dem Hamsterrad ausgebrochen und wechselt auf die Freiheitsbahn (Freiheits-Cashflow ${eur(fc)}).`);
@@ -747,11 +921,48 @@ function enterFast(p){
 }
 
 // ---------- Geschäfte ----------
-function buyAsset(p,c){
+function buyAsset(p,c,long){
   const mortgage = c.price - c.down;
+  if(c.expert){
+    const cf = exCf(c,long), rate = S.rate + (long?EX.longExtra:0);
+    pay(p, c.down + c.nk, c.name);
+    p.assets.push({id:uid(), cat:c.cat, name:c.name, price:c.price, down:c.down, nk:c.nk, mortgage, cf, units:c.units||0,
+      rent:c.rent, rate, fixedUntil:S.round + (long?EX.longBind:EX.shortBind)});
+    log(`✅ ${nm(p)} kauft ${c.name} für ${eur(c.price)} + ${eur(c.nk)} Nebenkosten (Zins ${pct(rate)}, ${long?"lange":"kurze"} Bindung, Cashflow ${eur(cf)}).`);
+    return;
+  }
   pay(p, c.down, c.name);
   p.assets.push({id:uid(), cat:c.cat, name:c.name, price:c.price, down:c.down, mortgage, cf:c.cf, units:c.units||0});
   log(`✅ ${nm(p)} kauft ${c.name} für ${eur(c.price)} (EK ${eur(c.down)}, Cashflow ${eur(c.cf)}).`);
+}
+// Experten-Kaufdialog mit Mietrechnung und Wahl der Zinsbindung
+function expertDeal(c){
+  const p = P(), mort = c.price - c.down, eq = c.down + c.nk, tr = taxRate(p), res = Math.round(c.price*EX.reserve);
+  const cfS = exCf(c,false), cfL = exCf(c,true);
+  const afa = Math.round(c.price*0.8*0.02/12);
+  const net = cf => exNet(c, cf, tr);
+  const can = p.cash >= eq, needLoan = can ? 0 : Math.ceil((eq-p.cash)/1000)*1000;
+  const ok = cf => can || (cashflow(p) + cf - needLoan/100 >= 0 && p.loan + needLoan <= loanCap(p));
+  const row = (l,v,cls="") => `<span>${l}</span><span class="${cls}">${v}</span>`;
+  modal({title:c.title, icon:c.cat==="gewerbe"?"🏪":c.cat==="garage"?"🚗":"🏠", color:"#1565c0",
+    body:`<p>${c.text}</p>
+    <div class="facts">${row("Kaufpreis",eur(c.price))}${row("+ Kaufnebenkosten (10 %)",eur(c.nk))}${row("Anzahlung",eur(c.down))}${row("<b>Eigenkapital gesamt</b>",`<b>${eur(eq)}</b>`)}${row("Darlehen",eur(mort))}</div>
+    <div class="facts">${row("Kaltmiete",`+${eur(c.rent)}`,"pos")}${row("Bewirtschaftung (nicht umlagefähig)",`−${eur(c.costs)}`,"neg")}
+      ${row(`Zinsen kurz (${pct(S.rate)}, ${EX.shortBind} Runden)`,`−${eur(Math.round(mort*S.rate/12))}`,"neg")}
+      ${row(`Zinsen lang (${pct(S.rate+EX.longExtra)}, ${EX.longBind} Runden)`,`−${eur(Math.round(mort*(S.rate+EX.longExtra)/12))}`,"neg")}
+      ${row("<b>Cashflow vor Steuern</b>",`<b>${eur(cfS)} / ${eur(cfL)}</b>`)}
+      ${row(`– Rücklage (${eur(res)}) und Steuer (${Math.round(tr*100)} % nach ${eur(afa)} Abschreibung)`,"")}${row("<b>Netto pro Monat</b> (kurz / lang)",`<b>${eur(net(cfS))} / ${eur(net(cfL))}</b>`, net(cfL)>=0?"pos":"neg")}
+      ${row("Netto-Rendite aufs Eigenkapital",`${(net(cfS)*12/eq*100).toFixed(1).replace(".",",")} % p.a.`)}</div>
+    <div class="rc">💡 <b>Realitäts-Check:</b> Die Kaufnebenkosten zahlst du komplett aus eigener Tasche und bekommst sie beim Verkauf nicht zurück. Kurze Zinsbindung ist billiger, aber nach Ablauf gilt der dann aktuelle Marktzins – lange Bindung kostet mehr, schützt aber vor Zinsanstiegen.${c.risk?" Gewerbe kann scheitern: dann droht Totalverlust.":""}</div>
+    <p class="hint">Dein Bargeld: ${eur(p.cash)}${!can?` – fehlende ${eur(needLoan)} müsstest du per Bankkredit (1 %/Monat) finanzieren.`:""}</p>`,
+    buttons:[{t:"Ablehnen", cls:"sec", fn:done},
+      {t:`Kaufen · kurz ${pct(S.rate)}`, dis:!ok(cfS), fn:()=>{ buyAsset(p,c,false); done(); }},
+      {t:`Kaufen · lang ${pct(S.rate+EX.longExtra)}`, cls:"gold", dis:!ok(cfL), fn:()=>{ buyAsset(p,c,true); done(); }}]});
+}
+function toggleInsure(){
+  const p = P(); p.insured = !p.insured;
+  log(p.insured ? `🛡️ ${nm(p)} schließt eine Versicherung gegen Mietausfall und Großschäden ab.` : `🛡️ ${nm(p)} kündigt die Versicherung.`);
+  checkAll(); render();
 }
 function doBuyStock(p,t,price,q){
   p.cash -= q*price;
@@ -763,19 +974,23 @@ function doSellStock(q,t,price){
   const g = s.qty*price - s.cost;
   q.cash += s.qty*price; delete q.stocks[t];
   log(`📊 ${nm(q)} verkauft ${s.qty.toLocaleString("de-DE")} × ${t} zu ${eur(price)} (${g>=0?"Gewinn":"Verlust"} ${eur(Math.abs(g))}).`);
+  if(XP() && g>0){ const tax = Math.round(g*EX.stockTax); q.cash -= tax; log(`🧾 ${nm(q)} zahlt ${eur(tax)} Abgeltungsteuer (25 %) auf den Kursgewinn.`); }
 }
 function showDeal(c){
   const p = P(); curCard = c;
   if(c.kind==="aktie") return stockCard(c, true);
   if(p.ai){
-    if(aiWantsAsset(p,c)) buyAsset(p,c); else log(`🤖 ${nm(p)} lehnt ab: ${c.name} (${eur(c.price)}, Cashflow ${eur(c.cf)}).`);
+    if(c.expert){ const long = aiExpertChoice(p,c); if(long!==null) buyAsset(p,c,long); else log(`${nm(p)} lehnt ab: ${c.name} (${eur(c.price)}) – rechnet sich nach Steuern und Nebenkosten nicht.`); }
+    else if(aiWantsAsset(p,c)) buyAsset(p,c); else log(`${nm(p)} lehnt ab: ${c.name} (${eur(c.price)}, Cashflow ${eur(c.cf)}).`);
     return done();
   }
+  if(c.expert) return expertDeal(c);
   const mortgage = c.price - c.down, can = p.cash >= c.down;
   const needLoan = can ? 0 : Math.ceil((c.down-p.cash)/1000)*1000;
   const loanOk = can || (cashflow(p) + c.cf - needLoan/100 >= 0 && p.loan + needLoan <= loanCap(p));
   modal({title:c.title, icon:c.cat==="haus"||c.cat==="wohnung"?"🏠":c.cat==="anleihe"?"📜":c.cat==="garage"?"🚗":"🏪", color:"#1565c0",
     body:`<p>${c.text}</p><div class="facts"><span>Kaufpreis</span><span>${eur(c.price)}</span><span>Eigenkapital</span><span>${eur(c.down)}</span>${mortgage?`<span>Darlehen</span><span>${eur(mortgage)}</span>`:""}<span>Cashflow (nach Zins & Tilgung)</span><span class="${c.cf>=0?"pos":"neg"}">${eur(c.cf)}/Monat</span><span>Rendite aufs Eigenkapital</span><span>${(c.cf*12/c.down*100).toFixed(1).replace(".",",")} % p.a.</span></div>
+    ${XP()&&c.risk?`<div class="rc">💡 <b>Realitäts-Check:</b> Kleinunternehmen kosten Zeit und können scheitern – dann ist das eingesetzte Geld komplett weg. Erträge werden zudem versteuert.</div>`:""}
     <p class="hint">Dein Bargeld: ${eur(p.cash)}${!can ? (loanOk ? ` – fehlende ${eur(needLoan)} per Bankkredit (${eur(needLoan/100)}/Monat) finanzierbar.` : ` – die Bank finanziert die fehlenden ${eur(needLoan)} nicht (Cashflow würde negativ oder Kreditrahmen ${eur(loanCap(p))} überschritten).`) : ""}</p>`,
     buttons:[{t:"Ablehnen", cls:"sec", fn:done},
       {t: can?"Kaufen":"Mit Kredit kaufen", cls:"gold", dis:!loanOk, fn:()=>{ buyAsset(p,c); done(); }}]});
@@ -814,6 +1029,17 @@ function applyEvent(c,p){
   if(c.ev==="miete"){ S.players.forEach(q=>q.assets.forEach(a=>{ if(a.cat==="wohnung") a.cf+=50; })); log("📈 Mietspiegel steigt: Eigentumswohnungen +50 €/Monat."); }
   if(c.ev==="heizung"){ if(p.assets.some(a=>a.cat==="haus")){ pay(p,2500,"Heizungsschaden"); log(`🔧 ${nm(p)} zahlt 2.500 € für die Heizung.`); } else c.text += " – Du besitzt keins, Glück gehabt!"; }
   if(c.ev==="split"){ S.players.forEach(q=>{ if(q.stocks[c.ticker]){ q.stocks[c.ticker].qty*=2; } }); log(`📈 Aktiensplit ${c.ticker} 2:1.`); }
+  if(c.ev==="zins"){
+    const old = S.rate; S.rate = Math.min(EX.rateMax, Math.max(EX.rateMin, Math.round((S.rate+c.d)*10000)/10000));
+    c.text += ` Marktzins jetzt: <b>${pct(S.rate)}</b> (vorher ${pct(old)}).`;
+    log(`🏦 Marktzins ${c.d>0?"steigt":"sinkt"} auf ${pct(S.rate)}.`);
+  }
+  if(c.ev==="miete3"){ S.players.forEach(q=>q.assets.forEach(a=>{ if(a.rent){ const d = Math.round(a.rent*0.03); a.rent += d; a.cf += d; } })); log("📈 Mietspiegel steigt: alle Mieten +3 %."); }
+  if(c.ev==="insolvenz"){
+    const hit = S.players.filter(q=>q.stocks[c.ticker]);
+    hit.forEach(q=>{ log(`💥 ${nm(q)} verliert ${q.stocks[c.ticker].qty.toLocaleString("de-DE")} Aktien ${c.ticker} (${eur(q.stocks[c.ticker].cost)} Einsatz).`); delete q.stocks[c.ticker]; });
+    if(!hit.length) c.text += " Zum Glück hält niemand diese Aktie.";
+  }
 }
 function doSellAsset(q,a,o){
   const net = o - a.mortgage;
@@ -828,7 +1054,7 @@ function showMarket(c, again){
   }
   if(!again){ // Computer entscheiden selbst
     S.players.forEach(q=>{ if(!q.ai || q.bankrupt) return;
-      q.assets.filter(a=>a.cat===c.cat).forEach(a=>{ const o=c.offer(a), base=Math.max(1000, a.down||(a.price-a.mortgage)); if(o-a.mortgage >= base*2.5) doSellAsset(q,a,o); }); });
+      q.assets.filter(a=>a.cat===c.cat).forEach(a=>{ const o=c.offer(a), base=Math.max(1000, (a.down||(a.price-a.mortgage)) + (a.nk||0)); if(o-a.mortgage >= base*(XP()?1.6:2.5)) doSellAsset(q,a,o); }); });
   }
   const rows = [];
   S.players.forEach((q,qi)=>{ if(q.ai || q.bankrupt) return; q.assets.forEach(a=>{ if(a.cat===c.cat){
@@ -912,7 +1138,7 @@ function endTurn(){
   const n = S.players.length;
   let i = S.cur;
   for(let guard=0; guard<n*4; guard++){
-    i = (i+1)%n; if(i===0) S.round++;
+    i = (i+1)%n; if(i===0){ S.round++; if(XP() && S.round % EX.inflEvery === 0) inflation(); }
     const q = S.players[i];
     if(q.free||q.bankrupt) continue;
     if(q.skip>0){ q.skip--; log(`⏸️ ${nm(q)} setzt aus (noch ${q.skip}).`); continue; }
@@ -938,6 +1164,16 @@ function rules(){
   <p>Du startest mit einem <b>Freiheits-Cashflow</b> von passivem Einkommen × ${FAST_MULT} und bekommst ihn einmal sofort als Startbonus. Kein Gehalt, keine Ausgaben mehr.</p>
   <p>🏗️ <b>Investition:</b> Großprojekte gegen Bargeld, die deinen Freiheits-Cashflow erhöhen. 💰 <b>Geldfluss-Tag:</b> Freiheits-Cashflow kassieren. ⚡ <b>Risiko:</b> Klagen, Steuernachzahlungen oder Crashs kosten Geld oder Investitionen. 🎯 <b>Wagnis:</b> ${eur(WAGNIS_COST)} einsetzen, bei 5–6 gibt es ${eur(WAGNIS_WIN)}. 🤝 <b>Stiftung:</b> spenden für 3 Züge mit 2 Würfeln.</p>
   <p>🏆 <b>Sieg:</b> Lande auf deinem 🌟 <b>Traumfeld</b> und kaufe deinen Traum – oder steigere deinen Freiheits-Cashflow um ${eur(FAST_GOAL)}.</p>
+  <h3>🎓 Experten-Modus</h3>
+  <p>Für Fortgeschrittene – näher an der Realität:</p>
+  <p>🏠 <b>Kaufnebenkosten:</b> +10 % auf den Kaufpreis (Grunderwerbsteuer, Notar, Makler), komplett aus Eigenkapital. <b>Mietmodell:</b> Kaltmiete − Bewirtschaftung − Zinsen = Cashflow; realistische Renditen.</p>
+  <p>🧾 <b>Steuern:</b> auf Erträge aus Vermietung und Unternehmen (25–42 % je nach Beruf), 25 % Abgeltungsteuer auf Aktiengewinne.</p>
+  <p>🔧 <b>Instandhaltung:</b> Pflicht-Rücklage pro Objekt; Reparaturen werden zuerst aus der Rücklage bezahlt. 🏚️ <b>Leerstand</b> kostet Miete.</p>
+  <p>🛡️ <b>Versicherung</b> (im Finanzbogen): Prämie nach Immobilienwert, übernimmt Mietausfall und Großschäden.</p>
+  <p>🏦 <b>Zinsbindung:</b> Beim Kauf kurz (${EX.shortBind} Runden, Marktzins) oder lang (${EX.longBind} Runden, +0,5 %). Danach gilt der aktuelle Marktzins – und der ändert sich durch Zinswenden auf dem Markt.</p>
+  <p>📉 <b>Inflation:</b> Alle ${EX.inflEvery} Runden steigen Lebenshaltungskosten (+2,5 %) stärker als Gehälter (+2 %); Mieten +2 %.</p>
+  <p>💥 <b>Totalverluste:</b> Unternehmen können scheitern, Aktien durch Insolvenz wertlos werden.</p>
+  <p>Ausbruch: Das passive Einkommen muss die Ausgaben <b>inklusive</b> Steuern, Rücklage und Versicherung decken.</p>
   <h3>Computer-Gegner</h3>
   <p>🤖 Computer spielen automatisch: Sie kaufen Geschäfte mit guter Rendite, verkaufen bei guten Angeboten und tilgen teure Schulden. Ist kein Mensch mehr im Rennen, endet das Spiel.</p>
   <p class="hint">Der Spielstand wird automatisch im Browser gespeichert.</p>`, buttons:[{t:"Los geht's", cls:"gold"}]});
