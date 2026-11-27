@@ -8,6 +8,8 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Geldfluss">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230f3d2e'/%3E%3Ctext x='50' y='70' font-size='60' text-anchor='middle'%3E%F0%9F%92%B6%3C/text%3E%3C/svg%3E">
 <title>Geldfluss – Raus aus dem Hamsterrad</title>
 <style>
@@ -99,6 +101,16 @@ table.results td{padding:7px 4px;vertical-align:top}
 .rc{background:#fdf3d8;border-left:4px solid var(--accent);border-radius:8px;padding:8px 10px;font-size:13.5px;margin:8px 0}
 ul.rep{margin:4px 0 8px;padding-left:18px;font-size:14px} ul.rep li{margin:4px 0}
 .facts + .facts{margin-top:6px}
+.coach{background:#e8f1fb;border-left:4px solid #1565c0;border-radius:8px;padding:8px 10px;font-size:13.5px;margin:8px 0}
+.coach.good{background:#e8f5e9;border-color:#2e7d32} .coach.bad{background:#fdecea;border-color:#c62828}
+.chart{width:100%;height:auto;display:block;margin-top:6px} .chart text{font-size:9px;fill:#6b756f}
+.clegend{display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:2px}
+.clegend i{display:inline-block;width:10px;height:3px;margin-right:4px;vertical-align:3px}
+details.hist,details.review{margin-top:8px} details summary{cursor:pointer;font-weight:600;font-size:14px}
+details.review{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:#fff}
+.bidrow{display:grid;grid-template-columns:1fr 130px;gap:8px;align-items:center;padding:6px 0;border-bottom:1px dashed var(--line);font-size:14px}
+.bidrow input{width:100%}
+.trade label{display:block;font-size:13px;color:var(--muted);margin:8px 0 3px} .trade select,.trade input{width:100%}
 .cmini{width:80%;max-width:220px}
 .cmini .bar{height:8px;margin-top:3px}
 /* Touch & Mobil */
@@ -155,6 +167,7 @@ header{padding-top:calc(10px + env(safe-area-inset-top));padding-left:calc(16px 
   <h1>Geld<span>fluss</span></h1>
   <div class="hint" style="color:#cfe0d6">Raus aus dem Hamsterrad – baue passives Einkommen auf</div>
   <div class="sp"></div>
+  <button class="gold sm hidden" id="btnInstall">📲 Installieren</button>
   <button class="sec sm" id="btnRules">Regeln</button>
   <button class="sec sm" id="btnNew">Neues Spiel</button>
 </header>
@@ -482,7 +495,102 @@ function newPlayer(name, pi, color, dream, ai){
   const p = PROFS[pi];
   return {name, prof:pi, color, dream, ai, cash:p.savings, children:0, loan:0, pos:0, skip:0, charity:0, free:false, bankrupt:false, fast:null,
     debts:{wohnen:{pay:p.wohnen[0],debt:p.wohnen[1]}, auto:{pay:p.auto[0],debt:p.auto[1]}, karte:{pay:p.karte[0],debt:p.karte[1]}, studium:{pay:p.studium[0],debt:p.studium[1]}},
-    assets:[], stocks:{}, reserve:0, insured:false, infl:1, salF:1};
+    assets:[], stocks:{}, reserve:0, insured:false, infl:1, salF:1, hist:[], st:null};
+}
+// Statistik für Rückblick (auch für alte Spielstände nachrüsten)
+function st(p){ return p.st || (p.st = {konsum:0, interest:0, charity:0, stockGain:0, buys:[], sells:[]}); }
+function recordHist(){
+  S.players.forEach(p=>{ if(p.bankrupt) return; p.hist = p.hist||[];
+    if(!p.fast) p.hist.push({r:S.round, pas:passive(p), exp:expenses(p)*S.goal, cash:p.cash});
+    if(p.hist.length>400) p.hist = p.hist.filter((h,i)=>i%2===0);
+  });
+}
+// ---------- Coach ----------
+const coachBox = (html, kind="") => (S && S.coach) ? `<div class="coach ${kind}">🧭 <b>Coach:</b> ${html}</div>` : "";
+const pctN = v => (v*100).toFixed(1).replace(".",",")+" %";
+// Teuerste tilgbare Konsumschuld (Zins pro Jahr = Rate ÷ Restschuld × 12)
+function bestDebt(p){
+  const names = {karte:"Kreditkarte", auto:"Autokredit", studium:"Studienkredit", wohnen:"Hypothek"};
+  let best = null;
+  for(const k of ["karte","auto","studium","wohnen"]){ const d = p.debts[k];
+    if(d.debt>0 && d.pay>0){ const y = d.pay/d.debt*12; if(!best || y>best.y) best = {k, n:names[k], y, debt:d.debt, pay:d.pay}; } }
+  return best;
+}
+function coachDeal(p, c){
+  if(!S.coach) return "";
+  if(c.expert){
+    const eq = c.down + c.nk, nS = exNet(c, exCf(c,false), taxRate(p)), nL = exNet(c, exCf(c,true), taxRate(p)), roe = nS*12/eq;
+    let t = roe>=0.08 ? `✅ <b>Gutes Geschäft</b> – ${pctN(roe)} netto aufs Eigenkapital ist in der Realität selten.` :
+            roe>=0.04 ? `👍 <b>Durchschnitt</b> – ${pctN(roe)} netto ist realistisch, baut aber nur langsam Vermögen auf.` :
+            nL<0 ? `👎 <b>Finger weg</b> – das Objekt kostet dich nach Steuern und Rücklage jeden Monat Geld.` :
+                   `👎 <b>Schwach</b> – nur ${pctN(roe)} netto. Dein Eigenkapital ist woanders besser aufgehoben.`;
+    t += S.rate<0.035 ? " Zinsen sind niedrig: <b>lange Bindung</b> sichert das ab." : S.rate>0.045 ? " Zinsen sind hoch: <b>kurze Bindung</b>, um später günstiger umzuschulden." : " Zinsen mittel: lange Bindung kostet wenig mehr und schützt vor Zinswenden.";
+    if(p.cash < eq) t += " Achtung: Mit Bankkredit (12 % p.a.) wird es teuer.";
+    return coachBox(t, roe>=0.04 && nL>=0 ? "good" : "bad");
+  }
+  const roe = c.cf*12/c.down, bd = bestDebt(p);
+  let t, kind = "good";
+  if(c.cf<0){ t = `⚠️ <b>Negativer Cashflow</b> – kostet dich jeden Monat ${eur(-c.cf)}. Nur als Wette auf einen späteren Verkauf und nur mit Polster.`; kind = "bad"; }
+  else if(roe>=0.3) t = `✅ <b>Sehr gutes Geschäft</b> – ${pctN(roe)} Rendite pro Jahr aufs Eigenkapital. Zugreifen, wenn möglich.`;
+  else if(roe>=0.12) t = `👍 <b>Solide</b> – ${pctN(roe)} pro Jahr aufs Eigenkapital.`;
+  else { t = `👎 <b>Schwach</b> – nur ${pctN(roe)} pro Jahr.`; kind = "bad"; }
+  if(bd && bd.y > roe && c.cf>=0 && p.cash >= bd.debt) t += ` Mehr bringt es, die <b>${bd.n}</b> zu tilgen (${pctN(bd.y)} p.a.).`;
+  if(p.cash < c.down) t += ` Der fehlende Betrag käme per Bankkredit zu 12 % p.a. – lohnt nur, wenn die Rendite deutlich höher ist.`;
+  return coachBox(t, kind);
+}
+function coachStock(p, c){
+  if(!S.coach) return "";
+  const s = p.stocks[c.ticker];
+  let t = c.price<=5 ? "📉 <b>Kurs sehr niedrig</b> – klassische Kaufgelegenheit, wenn du Geld übrig hast." :
+          c.price>=25 ? "📈 <b>Kurs hoch</b> – eher Verkaufs- als Kaufgelegenheit." : "Mittlerer Kurs – weder Schnäppchen noch Rekord. Abwarten ist oft klug.";
+  if(s){ const g = c.price/(s.cost/s.qty)-1; t += ` Deine ${s.qty.toLocaleString("de-DE")} Stück: ${g>=0?"+":""}${pctN(g)} gegenüber Einkauf.`; }
+  t += " Aktien bringen keinen Cashflow – Gewinn nur beim Verkauf.";
+  if(XP()) t += " Im Experten-Modus können Firmen pleitegehen: nicht alles in eine Aktie.";
+  return coachBox(t);
+}
+function coachMarket(p, c){
+  if(!S.coach) return "";
+  const mine = p.ai ? [] : p.assets.filter(a=>a.cat===c.cat);
+  if(!mine.length) return "";
+  const a = mine[0], eq = (a.down||(a.price-a.mortgage)) + (a.nk||0), net = c.offer(a) - a.mortgage, x = net/Math.max(1,eq);
+  const t = x>=2 ? `Ein Verkauf brächte das <b>${x.toFixed(1).replace(".",",")}-fache</b> deines Eigenkapitals. Lohnt sich, wenn du das Geld in etwas mit mehr Cashflow steckst – du verlierst ${eur(a.cf)}/Monat.` :
+            x>=1 ? `Verkauf bringt nur das ${x.toFixed(1).replace(".",",")}-fache deines Einsatzes – dafür gibst du ${eur(a.cf)}/Monat Cashflow auf. Eher behalten.` :
+                   `Verkauf mit Verlust – nur sinnvoll, wenn das Objekt dich monatlich Geld kostet.`;
+  return coachBox(t, x>=2?"good":"bad");
+}
+// Nächster sinnvoller Schritt für den Finanzbogen
+function coachNext(p){
+  if(!S.coach || p.ai || p.fast || p.free || p.bankrupt) return "";
+  const bd = bestDebt(p), buffer = 1000;
+  let t;
+  if(bd && bd.k!=="wohnen" && p.cash >= bd.debt + buffer) t = `Tilge die <b>${bd.n}</b> (${eur(bd.debt)}): spart ${eur(bd.pay)} pro Monat – das sind ${pctN(bd.y)} „Rendite“ pro Jahr, garantiert.`;
+  else if(p.loan>=1000 && p.cash >= 1000 + buffer*2) t = `Zahle Bankkredit zurück: Jeder Tausender spart 10 € pro Monat (12 % p.a.).`;
+  else if(XP() && !p.insured && p.assets.filter(isProp).length>=2) t = `Du hast mehrere Immobilien – eine <b>Versicherung</b> schützt vor Leerstand und Großschäden.`;
+  else if(cashflow(p)<0) t = `⚠️ Dein Cashflow ist <b>negativ</b>. Verkaufe Verlustbringer oder tilge Schulden, sonst droht die Insolvenz.`;
+  else if(p.cash < buffer) t = `Baue erst ein kleines <b>Polster</b> auf – sonst zwingen dich Konsum-Felder in teure Kredite.`;
+  else if(bd && bd.k!=="wohnen") t = `Spare auf die Tilgung der <b>${bd.n}</b> (noch ${eur(bd.debt - p.cash)}) oder nutze ein Geschäft mit mehr als ${pctN(bd.y)} Rendite.`;
+  else t = `Halte Ausschau nach Geschäften mit ${XP()?"mindestens 5 % Netto":"über 12 %"}-Rendite aufs Eigenkapital.`;
+  const gap = Math.max(0, expenses(p)*S.goal - passive(p));
+  return coachBox(`${t}<br><span class="hint">Bis zum Ausbruch fehlen noch <b>${eur(gap)}</b> passives Einkommen pro Monat.</span>`);
+}
+// Kleine Liniengrafik: passives Einkommen vs. Ausbruch-Ziel
+function chartSVG(h){
+  if(!h || h.length<2) return `<p class="hint">Die Grafik erscheint nach ein paar Runden.</p>`;
+  const W=320, H=130, L=34, B=18, T=8, R=6;
+  const maxY = Math.max(...h.map(x=>Math.max(x.pas,x.exp)), 100), minY = Math.min(0, ...h.map(x=>x.pas));
+  const r0 = h[0].r, r1 = h[h.length-1].r || r0+1;
+  const X = r => L + (r-r0)/Math.max(1,r1-r0)*(W-L-R), Y = v => T + (maxY-v)/(maxY-minY)*(H-T-B);
+  const line = k => h.map((x,i)=>`${i?"L":"M"}${X(x.r).toFixed(1)},${Y(x[k]).toFixed(1)}`).join("");
+  const cross = h.find(x=>x.pas>=x.exp && x.pas>0);
+  const k = v => v>=1000 ? Math.round(v/1000)+"k" : Math.round(v);
+  return `<svg viewBox="0 0 ${W} ${H}" class="chart" role="img" aria-label="Verlauf passives Einkommen und Ziel">
+    <line x1="${L}" y1="${Y(0)}" x2="${W-R}" y2="${Y(0)}" stroke="#ccc"/>
+    <text x="${L-4}" y="${Y(maxY)+4}" text-anchor="end">${k(maxY)}</text><text x="${L-4}" y="${Y(0)+4}" text-anchor="end">0</text>
+    <text x="${L}" y="${H-3}">R ${r0}</text><text x="${W-R}" y="${H-3}" text-anchor="end">R ${r1}</text>
+    <path d="${line("exp")}" fill="none" stroke="#c62828" stroke-width="2" stroke-dasharray="5 3"/>
+    <path d="${line("pas")}" fill="none" stroke="#2e7d32" stroke-width="2.5"/>
+    ${cross?`<circle cx="${X(cross.r)}" cy="${Y(cross.pas)}" r="4.5" fill="#d9a62e" stroke="#fff" stroke-width="1.5"/>`:""}
+  </svg><div class="clegend"><span><i style="background:#2e7d32"></i>Passives Einkommen</span><span><i style="background:#c62828"></i>Ausbruch-Ziel (Ausgaben)</span>${cross?`<span><i style="background:#d9a62e"></i>Ausbruch</span>`:""}</div>`;
 }
 const P = () => S.players[S.cur];
 const passive = p => p.assets.reduce((s,a)=>s+a.cf,0);
@@ -545,6 +653,7 @@ function renderSetup(){
       <option value="x">Experte: Steuern, Nebenkosten, Leerstand, Zinsen, Inflation, Pleiten</option>
     </select>
     <p class="hint" id="diffHint" style="margin:4px 0 0"></p>
+    <label class="aichk" style="margin-top:12px;font-size:15px;white-space:normal"><input type="checkbox" id="coach" checked> 🧭 Coach-Tipps anzeigen <span class="hint">(erklärt, ob sich ein Angebot lohnt und was als Nächstes sinnvoll ist)</span></label>
     <h3>Spielmodus</h3>
     <select id="mode" style="width:100%">
       <option value="2">Komplett: Hamsterrad ➜ Freiheitsbahn ➜ Traum erfüllen</option>
@@ -558,7 +667,8 @@ function renderSetup(){
     <div class="row" style="margin-top:18px;justify-content:flex-end">
       ${saved?'<button class="sec" id="btnCont">Gespeichertes Spiel fortsetzen</button>':""}
       <button class="gold" id="btnStart">Spiel starten</button>
-    </div></div>`;
+    </div>
+    <p class="hint" style="margin:14px 0 0;text-align:right">📲 <a href="#" onclick="installHelp();return false">Als App installieren</a> – im Vollbild und offline spielen</p></div>`;
   $("#btnStart").onclick = startGame;
   const dh = ()=>{ $("#diffHint").textContent = $("#diff").value==="x"
     ? "Für Fortgeschrittene: realistische Renditen, 10 % Kaufnebenkosten, Steuern auf Erträge, Instandhaltungsrücklage, Leerstand & Reparaturen, Zinsbindung mit Zinsänderungen, Inflation und echte Totalverluste. Dauert deutlich länger."
@@ -587,6 +697,7 @@ function startGame(){
        dreamFields: buildDreamFields(players), winners:[], expert: $("#diff").value==="x", rate: EX.rateStart, report:[]};
   players.forEach(p=>log(`${nm(p)} startet als ${PROFS[p.prof].n} mit ${eur(p.cash)} – Traum: ${dreamOf(p).i} ${dreamOf(p).n}.`));
   if(S.expert) log(`🎓 Experten-Modus: Marktzins ${pct(S.rate)}, Kaufnebenkosten 10 %, Steuern, Leerstand, Inflation & Co. sind aktiv.`);
+  S.coach = $("#coach").checked; recordHist();
   view = 0; showGame();
 }
 function showGame(){ $("#setup").classList.add("hidden"); $("#game").classList.remove("hidden"); $("#mnav").classList.remove("hidden"); setView("board"); render(); }
@@ -701,9 +812,12 @@ function renderSheet(){
       <div class="kpi"><small>Bargeld</small><b>${eur(p.cash)}</b></div>
       <div class="kpi"><small>Monatl. Cashflow</small><b class="${cashflow(p)>=0?"pos":"neg"}">${eur(cashflow(p))}</b></div>
     </div>
+    ${isCur?coachNext(p):""}
     <h3>Ausbruch aus dem Hamsterrad</h3>
     <div class="row" style="justify-content:space-between;font-size:14px"><span>Passiv: <b>${eur(pas)}</b></span><span>Ziel: <b>${eur(goal)}</b></span></div>
     ${bar(pas/goal*100)}
+    <details class="hist" ${(p.hist||[]).length>=3?"open":""}><summary>📈 Verlauf anzeigen</summary>${chartSVG(p.hist)}</details>
+    ${isCur && tradePartners(p).length ? `<div class="row" style="margin-top:8px"><button class="sm" onclick="openTrade()">🤝 Mit Mitspielern handeln</button></div>` : ""}
     <h3>Einnahmen</h3>
     <table><tr><td>Gehalt</td><td class="r">${eur(b.salary)}</td></tr>
       <tr><td>Passives Einkommen</td><td class="r">${eur(pas)}</td></tr>
@@ -729,7 +843,7 @@ function modal({title, color="#0f3d2e", icon="", body="", buttons=[]}){
   buttons.forEach(b=>{
     const el = document.createElement("button");
     el.textContent = b.t; if(b.cls) el.className = b.cls; if(b.dis) el.disabled = true;
-    el.onclick = ()=>{ closeModal(); b.fn&&b.fn(); flushQ(); };
+    el.onclick = ()=>{ const v = b.read ? b.read() : undefined; if(b.check && !b.check(v)) return; closeModal(); b.fn&&b.fn(v); flushQ(); };
     $("#mf").appendChild(el);
   });
 }
@@ -794,6 +908,7 @@ function roll(n){
 }
 function payday(p){
   const cf = cashflow(p);
+  st(p).interest += loanPay(p);
   if(cf>=0){ p.cash += cf; log(`💶 Zahltag für ${nm(p)}: +${eur(cf)}.`); }
   else if(p.cash >= -cf){ p.cash += cf; log(`⚠️ Zahltag für ${nm(p)}: ${eur(cf)} (negativer Cashflow).`); }
   else { liquidate(p, -cf); if(p.bankrupt) return; }
@@ -836,8 +951,8 @@ function resolveField(p){
       log(`🚗 ${nm(p)} finanziert einen Neuwagen: +250 €/Monat, +15.000 € Schulden.`);
       return info(p, f, "Konsum: Neuwagen!", `<p>Du konntest nicht widerstehen und hast einen Neuwagen finanziert.</p><div class="facts"><span>Neue Rate</span><span>+250 €/Monat</span><span>Neue Schulden</span><span>15.000 €</span></div>`, "Autsch");
     }
-    pay(p, k[1], k[0]); log(`🛍️ ${nm(p)}: ${k[0]} kostet ${eur(k[1])}.`);
-    return info(p, f, "Konsum", `<p><b>${k[0]}</b></p><div class="facts"><span>Kosten</span><span>${eur(k[1])}</span></div>`, "Bezahlen");
+    pay(p, k[1], k[0]); st(p).konsum += k[1]; log(`🛍️ ${nm(p)}: ${k[0]} kostet ${eur(k[1])}.`);
+    return info(p, f, "Konsum", `<p><b>${k[0]}</b></p><div class="facts"><span>Kosten</span><span>${eur(k[1])}</span></div>${coachBox(`Kleine Ausgaben summieren sich: Du hast bisher <b>${eur(st(p).konsum)}</b> für Konsum ausgegeben${st(p).konsum>=5000?" – das wäre Eigenkapital für ein Geschäft gewesen":""}.`)}`, "Bezahlen");
   }
   if(t==="kind"){
     if(p.children<3){ p.children++; log(`👶 ${nm(p)} bekommt Nachwuchs (${p.children}).`);
@@ -846,9 +961,9 @@ function resolveField(p){
   }
   if(t==="spende"){
     const amt = Math.round(income(p)*0.1);
-    const give = ()=>{ p.cash-=amt; p.charity=3; log(`🤝 ${nm(p)} spendet ${eur(amt)}.`); };
+    const give = ()=>{ p.cash-=amt; p.charity=3; st(p).charity += amt; log(`🤝 ${nm(p)} spendet ${eur(amt)}.`); };
     if(p.ai){ if(p.cash>=amt+3000) give(); return done(); }
-    return modal({title:"Spende", icon:f.i, color:f.c, body:`<p>Spende 10 % deines Einkommens (<b>${eur(amt)}</b>) für einen guten Zweck. Dafür darfst du die nächsten <b>3 Züge</b> wahlweise mit 2 Würfeln würfeln.</p>`,
+    return modal({title:"Spende", icon:f.i, color:f.c, body:`<p>Spende 10 % deines Einkommens (<b>${eur(amt)}</b>) für einen guten Zweck. Dafür darfst du die nächsten <b>3 Züge</b> wahlweise mit 2 Würfeln würfeln.</p>${coachBox(p.cash>=amt+3000?"Lohnt sich: Mit 2 Würfeln kommst du schneller an Zahltagen und Gelegenheiten vorbei – und du hast genug Polster.":"Lieber nicht: Danach wäre dein Polster sehr klein, und Konsum-Felder würden dich in teure Kredite zwingen.")}`,
       buttons:[{t:"Nein danke", cls:"sec", fn:done},{t:`Spenden (${eur(amt)})`, cls:"gold", dis:p.cash<amt, fn:()=>{ give(); done(); }}]});
   }
   if(t==="kuendigung"){
@@ -926,12 +1041,14 @@ function buyAsset(p,c,long){
   if(c.expert){
     const cf = exCf(c,long), rate = S.rate + (long?EX.longExtra:0);
     pay(p, c.down + c.nk, c.name);
+    st(p).buys.push({r:S.round, name:c.name, eq:c.down+c.nk, cf:exNet(c, cf, taxRate(p))});
     p.assets.push({id:uid(), cat:c.cat, name:c.name, price:c.price, down:c.down, nk:c.nk, mortgage, cf, units:c.units||0,
       rent:c.rent, rate, fixedUntil:S.round + (long?EX.longBind:EX.shortBind)});
     log(`✅ ${nm(p)} kauft ${c.name} für ${eur(c.price)} + ${eur(c.nk)} Nebenkosten (Zins ${pct(rate)}, ${long?"lange":"kurze"} Bindung, Cashflow ${eur(cf)}).`);
     return;
   }
   pay(p, c.down, c.name);
+  st(p).buys.push({r:S.round, name:c.name, eq:c.down, cf:c.cf});
   p.assets.push({id:uid(), cat:c.cat, name:c.name, price:c.price, down:c.down, mortgage, cf:c.cf, units:c.units||0});
   log(`✅ ${nm(p)} kauft ${c.name} für ${eur(c.price)} (EK ${eur(c.down)}, Cashflow ${eur(c.cf)}).`);
 }
@@ -954,8 +1071,10 @@ function expertDeal(c){
       ${row(`– Rücklage (${eur(res)}) und Steuer (${Math.round(tr*100)} % nach ${eur(afa)} Abschreibung)`,"")}${row("<b>Netto pro Monat</b> (kurz / lang)",`<b>${eur(net(cfS))} / ${eur(net(cfL))}</b>`, net(cfL)>=0?"pos":"neg")}
       ${row("Netto-Rendite aufs Eigenkapital",`${(net(cfS)*12/eq*100).toFixed(1).replace(".",",")} % p.a.`)}</div>
     <div class="rc">💡 <b>Realitäts-Check:</b> Die Kaufnebenkosten zahlst du komplett aus eigener Tasche und bekommst sie beim Verkauf nicht zurück. Kurze Zinsbindung ist billiger, aber nach Ablauf gilt der dann aktuelle Marktzins – lange Bindung kostet mehr, schützt aber vor Zinsanstiegen.${c.risk?" Gewerbe kann scheitern: dann droht Totalverlust.":""}</div>
+    ${coachDeal(p,c)}
     <p class="hint">Dein Bargeld: ${eur(p.cash)}${!can?` – fehlende ${eur(needLoan)} müsstest du per Bankkredit (1 %/Monat) finanzieren.`:""}</p>`,
     buttons:[{t:"Ablehnen", cls:"sec", fn:done},
+      ...(auctionBidders(p).length ? [{t:"Versteigern 🔨", cls:"sec", fn:()=>startAuction(c,p)}] : []),
       {t:`Kaufen · kurz ${pct(S.rate)}`, dis:!ok(cfS), fn:()=>{ buyAsset(p,c,false); done(); }},
       {t:`Kaufen · lang ${pct(S.rate+EX.longExtra)}`, cls:"gold", dis:!ok(cfL), fn:()=>{ buyAsset(p,c,true); done(); }}]});
 }
@@ -972,6 +1091,7 @@ function doBuyStock(p,t,price,q){
 function doSellStock(q,t,price){
   const s = q.stocks[t]; if(!s) return;
   const g = s.qty*price - s.cost;
+  st(q).stockGain += g;
   q.cash += s.qty*price; delete q.stocks[t];
   log(`📊 ${nm(q)} verkauft ${s.qty.toLocaleString("de-DE")} × ${t} zu ${eur(price)} (${g>=0?"Gewinn":"Verlust"} ${eur(Math.abs(g))}).`);
   if(XP() && g>0){ const tax = Math.round(g*EX.stockTax); q.cash -= tax; log(`🧾 ${nm(q)} zahlt ${eur(tax)} Abgeltungsteuer (25 %) auf den Kursgewinn.`); }
@@ -980,8 +1100,9 @@ function showDeal(c){
   const p = P(); curCard = c;
   if(c.kind==="aktie") return stockCard(c, true);
   if(p.ai){
-    if(c.expert){ const long = aiExpertChoice(p,c); if(long!==null) buyAsset(p,c,long); else log(`${nm(p)} lehnt ab: ${c.name} (${eur(c.price)}) – rechnet sich nach Steuern und Nebenkosten nicht.`); }
-    else if(aiWantsAsset(p,c)) buyAsset(p,c); else log(`${nm(p)} lehnt ab: ${c.name} (${eur(c.price)}, Cashflow ${eur(c.cf)}).`);
+    if(c.expert){ const long = aiExpertChoice(p,c); if(long!==null){ buyAsset(p,c,long); return done(); } log(`${nm(p)} lehnt ab: ${c.name} (${eur(c.price)}) – rechnet sich nach Steuern und Nebenkosten nicht.`); }
+    else if(aiWantsAsset(p,c)){ buyAsset(p,c); return done(); } else log(`${nm(p)} lehnt ab: ${c.name} (${eur(c.price)}, Cashflow ${eur(c.cf)}).`);
+    if(c.cat!=="anleihe" && auctionBidders(p).length) return startAuction(c, p);   // abgelehnte Geschäfte werden versteigert
     return done();
   }
   if(c.expert) return expertDeal(c);
@@ -991,8 +1112,10 @@ function showDeal(c){
   modal({title:c.title, icon:c.cat==="haus"||c.cat==="wohnung"?"🏠":c.cat==="anleihe"?"📜":c.cat==="garage"?"🚗":"🏪", color:"#1565c0",
     body:`<p>${c.text}</p><div class="facts"><span>Kaufpreis</span><span>${eur(c.price)}</span><span>Eigenkapital</span><span>${eur(c.down)}</span>${mortgage?`<span>Darlehen</span><span>${eur(mortgage)}</span>`:""}<span>Cashflow (nach Zins & Tilgung)</span><span class="${c.cf>=0?"pos":"neg"}">${eur(c.cf)}/Monat</span><span>Rendite aufs Eigenkapital</span><span>${(c.cf*12/c.down*100).toFixed(1).replace(".",",")} % p.a.</span></div>
     ${XP()&&c.risk?`<div class="rc">💡 <b>Realitäts-Check:</b> Kleinunternehmen kosten Zeit und können scheitern – dann ist das eingesetzte Geld komplett weg. Erträge werden zudem versteuert.</div>`:""}
+    ${coachDeal(p,c)}
     <p class="hint">Dein Bargeld: ${eur(p.cash)}${!can ? (loanOk ? ` – fehlende ${eur(needLoan)} per Bankkredit (${eur(needLoan/100)}/Monat) finanzierbar.` : ` – die Bank finanziert die fehlenden ${eur(needLoan)} nicht (Cashflow würde negativ oder Kreditrahmen ${eur(loanCap(p))} überschritten).`) : ""}</p>`,
     buttons:[{t:"Ablehnen", cls:"sec", fn:done},
+      ...(c.cat!=="anleihe" && auctionBidders(p).length ? [{t:"Versteigern 🔨", fn:()=>startAuction(c,p)}] : []),
       {t: can?"Kaufen":"Mit Kredit kaufen", cls:"gold", dis:!loanOk, fn:()=>{ buyAsset(p,c); done(); }}]});
 }
 // Aktienkarte: Computer entscheiden sofort, Menschen bekommen einen Dialog
@@ -1010,7 +1133,8 @@ function stockCard(c, first){
   modal({title:c.title, icon:"📊", color:"#1565c0",
     body:`<p>${c.text}</p><div class="facts"><span>Aktueller Kurs</span><span>${eur(c.price)}</span>${p.ai?"":`<span>Dein Bargeld</span><span>${eur(p.cash)}</span><span>Maximal kaufbar</span><span>${maxQ.toLocaleString("de-DE")} Stück</span>`}</div>
     ${p.ai?`<p class="hint">🤖 ${p.name} hat diese Karte gezogen – du darfst zu diesem Kurs verkaufen.</p>`:`<div class="row"><input type="number" id="qty" min="1" step="100" value="${Math.min(maxQ, 100)}" style="width:130px"> Stück <button class="sm" onclick="buyStock()">Kaufen</button></div>`}
-    ${sellHtml?`<h3>Zum aktuellen Kurs verkaufen</h3>${sellHtml}`:""}<p class="hint" id="stockMsg" style="margin-top:8px"></p>`,
+    ${sellHtml?`<h3>Zum aktuellen Kurs verkaufen</h3>${sellHtml}`:""}<p class="hint" id="stockMsg" style="margin-top:8px"></p>
+    ${p.ai?"":coachStock(p,c)}`,
     buttons:[{t:"Fertig", fn:done}]});
 }
 function buyStock(){
@@ -1043,6 +1167,7 @@ function applyEvent(c,p){
 }
 function doSellAsset(q,a,o){
   const net = o - a.mortgage;
+  st(q).sells.push({r:S.round, name:a.name, gain: net - ((a.down||(a.price-a.mortgage)) + (a.nk||0))});
   q.cash += net; q.assets = q.assets.filter(x=>x!==a);
   log(`💰 ${nm(q)} verkauft ${a.name} für ${eur(o)} (netto ${eur(net)}).`);
 }
@@ -1062,12 +1187,120 @@ function showMarket(c, again){
     rows.push(`<div class="sellrow"><span><b>${q.name}</b>: ${a.name}<br><span class="hint">Kauf ${eur(a.price)} · Darlehen ${eur(a.mortgage)} · CF ${eur(a.cf)}</span></span><button class="sm red" onclick="sellAsset(${qi},'${a.id}')">Verkaufen<br>netto ${eur(net)}</button></div>`);
   }}); });
   if(p.ai && !rows.length) return done();
-  modal({title:c.title, icon:f.i, color:f.c, body:`<p>${c.text}</p>${p.ai?`<p class="hint">🤖 ${p.name} hat diese Karte gezogen.</p>`:""}${rows.length?rows.join(""):'<p class="hint">Niemand besitzt einen passenden Vermögenswert.</p>'}`, buttons:[{t:"Fertig", fn:done}]});
+  modal({title:c.title, icon:f.i, color:f.c, body:`<p>${c.text}</p>${p.ai?`<p class="hint">🤖 ${p.name} hat diese Karte gezogen.</p>`:""}${rows.length?rows.join(""):'<p class="hint">Niemand besitzt einen passenden Vermögenswert.</p>'}${coachMarket(p,c)}`, buttons:[{t:"Fertig", fn:done}]});
 }
 function sellAsset(qi, id){
   const q = S.players[qi], a = q.assets.find(x=>x.id===id), c = curCard; if(!a||!c) return;
   doSellAsset(q,a,c.offer(a));
   renderSheet(); save(); showMarket(c, true);
+}
+
+// ---------- Auktion: abgelehnte Geschäfte versteigern ----------
+const eligible = (q, seller) => q!==seller && !q.bankrupt && !q.fast && !q.free;
+const dealEq = c => c.expert ? c.down + c.nk : c.down;
+function auctionBidders(seller){ return S.players.filter(q=>eligible(q,seller)); }
+function aiBid(q, c){
+  const eq = dealEq(c); if(q.cash < eq + 100) return 0;
+  const want = c.expert ? aiExpertChoice(q,c)!==null : aiWantsAsset(q,c);
+  if(!want) return 0;
+  const v = c.expert ? exNet(c, exCf(c, S.rate<0.045), taxRate(q)) : c.cf;
+  return Math.max(0, Math.floor(Math.min(q.cash - eq, v*6)/100)*100);
+}
+function startAuction(c, seller){
+  const eq = dealEq(c), bidders = auctionBidders(seller);
+  const bids = bidders.filter(q=>q.ai).map(q=>({q, bid:aiBid(q,c)})).filter(b=>b.bid>0);
+  const worth = c.expert ? exCf(c,false)>0 : c.cf>0;   // nur lohnende Geschäfte Menschen anbieten
+  const humans = (worth || !seller.ai) ? bidders.filter(q=>!q.ai && q.cash >= eq + 100) : [];
+  if(!humans.length) return resolveAuction(c, seller, bids);
+  modal({title:"Auktion: "+c.title, icon:"🔨", color:"#6a1b9a",
+    body:`<p><b>${nm(seller)}</b> versteigert dieses Geschäft. Wer am meisten bietet, übernimmt es zu den Kartenbedingungen und zahlt sein Gebot als Aufgeld an ${seller.name}.</p>
+      <div class="facts"><span>Kaufpreis</span><span>${eur(c.price)}</span><span>Eigenkapital nötig</span><span>${eur(eq)}</span><span>Cashflow</span><span>${c.expert?`${eur(exCf(c,S.rate<0.045))} vor Steuern`:eur(c.cf)}/Monat</span></div>
+      ${bids.length?`<p class="hint">🤖 Computer haben bereits verdeckt geboten.</p>`:""}
+      ${humans.map(q=>`<div class="bidrow"><span>${q.name}<br><span class="hint">max. ${eur(q.cash-eq)}</span></span><input type="number" min="0" step="100" value="0" data-pi="${S.players.indexOf(q)}" class="bid"></div>`).join("")}
+      <p class="hint">0 = kein Gebot. Tipp: Das Gebot sollte sich durch den Cashflow in wenigen Monaten zurückzahlen.${c.expert?" Zinsbindung wird automatisch nach Marktzins gewählt.":""}</p>`,
+    buttons:[{t:"Auktion auswerten 🔨", cls:"gold",
+      read:()=>[...document.querySelectorAll("input.bid")].map(i=>({q:S.players[+i.dataset.pi], bid:Math.max(0,Math.floor((+i.value||0)/100)*100)})),
+      fn:hb=>resolveAuction(c, seller, bids.concat(hb.filter(b=>b.bid>0)))}]});
+}
+function resolveAuction(c, seller, bids){
+  const eq = dealEq(c);
+  const valid = bids.filter(b=>b.q.cash >= eq + b.bid).sort((a,b)=>b.bid-a.bid);
+  const humanSeen = !seller.ai || bids.some(b=>!b.q.ai) || auctionBidders(seller).some(q=>!q.ai);
+  if(!valid.length){
+    log(`🔨 Für ${c.name} bietet niemand.`);
+    if(!seller.ai) return modal({title:"Keine Gebote", icon:"🔨", color:"#6a1b9a", body:`<p>Niemand wollte ${c.name} haben.</p>`, buttons:[{t:"Weiter", fn:done}]});
+    return done();
+  }
+  const w = valid[0];
+  w.q.cash -= w.bid; seller.cash += w.bid;
+  buyAsset(w.q, c, S.rate<0.045);
+  log(`🔨 ${nm(w.q)} ersteigert ${c.name} und zahlt ${eur(w.bid)} Aufgeld an ${seller.name}.`);
+  if(humanSeen) return modal({title:"Zuschlag!", icon:"🔨", color:"#6a1b9a",
+    body:`<p><b>${nm(w.q)}</b> bekommt den Zuschlag für <b>${c.name}</b> mit einem Gebot von <b>${eur(w.bid)}</b>.</p>${valid.length>1?`<p class="hint">Zweithöchstes Gebot: ${eur(valid[1].bid)} (${valid[1].q.name})</p>`:""}`,
+    buttons:[{t:"Weiter", fn:done}]});
+  done();
+}
+
+// ---------- Handel zwischen Spielern ----------
+function tradePartners(p){ return S.players.filter(q=>eligible(q,p) && (p.assets.length || q.assets.length)); }
+const tradeEq = a => (a.down||(a.price-a.mortgage)) + (a.nk||0);
+const aiValue = a => a.cf>0 ? a.cf*12/(XP()?0.06:0.15) : 0;
+function openTrade(){
+  const p = P(), partners = tradePartners(p); if(!partners.length) return;
+  modal({title:"Handel mit Mitspielern", icon:"🤝", color:"#00838f",
+    body:`<div class="trade">
+      <label>Handelspartner</label>
+      <select id="trP">${partners.map(q=>`<option value="${S.players.indexOf(q)}">${nm(q)}</option>`).join("")}</select>
+      <label>Was soll den Besitzer wechseln?</label>
+      <select id="trA"></select>
+      <label>Barpreis (der Käufer übernimmt zusätzlich das Darlehen)</label>
+      <input type="number" id="trPr" min="0" step="500" value="0">
+      <p class="hint" id="trInfo" style="margin-top:8px"></p></div>
+      ${coachBox("Ein fairer Preis orientiert sich am Cashflow: Der Käufer will sein Geld in wenigen Jahren zurück, der Verkäufer mehr als seinen Einsatz.")}`,
+    buttons:[{t:"Abbrechen", cls:"sec"},
+      {t:"Angebot machen", cls:"gold", read:()=>({pi:+$("#trP").value, a:$("#trA").value, price:Math.max(0,Math.round(+$("#trPr").value||0))}),
+       check:v=>!!v.a, fn:v=>proposeTrade(p, S.players[v.pi], v.a, v.price)}]});
+  const fill = ()=>{
+    const q = S.players[+$("#trP").value];
+    const opt = (pre, a) => `<option value="${pre}:${a.id}">${pre==="S"?"Verkaufen":"Kaufen"}: ${a.name} · CF ${eur(a.cf)}${a.mortgage?` · Darlehen ${eur(a.mortgage)}`:""}</option>`;
+    $("#trA").innerHTML = (p.assets.length?`<optgroup label="Von dir an ${q.name}">${p.assets.map(a=>opt("S",a)).join("")}</optgroup>`:"")
+      + (q.assets.length?`<optgroup label="Von ${q.name} an dich">${q.assets.map(a=>opt("B",a)).join("")}</optgroup>`:"");
+    hint();
+  };
+  const hint = ()=>{
+    const q = S.players[+$("#trP").value], [k,id] = ($("#trA").value||":").split(":");
+    const a = (k==="S"?p:q).assets.find(x=>x.id===id); if(!a){ $("#trInfo").textContent = "Keine Vermögenswerte zum Handeln."; return; }
+    $("#trInfo").innerHTML = `Ursprünglicher Einsatz: <b>${eur(tradeEq(a))}</b> · Cashflow ${eur(a.cf)}/Monat${a.cf>0?` · Richtwert nach Rendite: ca. <b>${eur(Math.round(aiValue(a)/500)*500)}</b>`:""}`;
+  };
+  $("#trP").onchange = fill; $("#trA").onchange = hint; fill();
+}
+function proposeTrade(p, q, key, price){
+  const [k,id] = key.split(":"), seller = k==="S"?p:q, buyer = k==="S"?q:p, a = seller.assets.find(x=>x.id===id);
+  if(!a) return;
+  if(buyer.cash < price) return modal({title:"Nicht genug Geld", icon:"🤝", body:`<p>${buyer.name} hat nur ${eur(buyer.cash)} bar – Handel ist nur mit Bargeld möglich.</p>`, buttons:[{t:"OK"}]});
+  const desc = `<b>${a.name}</b> (Cashflow ${eur(a.cf)}/Monat${a.mortgage?`, Darlehen ${eur(a.mortgage)} wird übernommen`:""}) geht von <b>${seller.name}</b> an <b>${buyer.name}</b> für <b>${eur(price)}</b>.`;
+  if(q.ai){
+    const v = aiValue(a);
+    const ok = q===buyer ? (a.cf>0 && price <= v*0.9 && q.cash >= price + 1000)
+                         : (price >= Math.max(v*1.1, tradeEq(a)*1.3, 1000));
+    if(ok){ doTrade(seller, buyer, a, price); return modal({title:"Angebot angenommen", icon:"🤝", color:"#00838f", body:`<p>🤖 ${q.name} nimmt an: ${desc}</p>`, buttons:[{t:"Prima"}]}); }
+    const target = q===buyer ? `bis etwa ${eur(Math.floor(Math.min(v*0.9, q.cash-1000)/500)*500)}` : `ab etwa ${eur(Math.ceil(Math.max(v*1.1, tradeEq(a)*1.3, 1000)/500)*500)}`;
+    log(`🤝 ${nm(q)} lehnt ein Angebot für ${a.name} ab.`);
+    return modal({title:"Angebot abgelehnt", icon:"🤝", color:"#00838f", body:`<p>🤖 ${q.name} lehnt ab.</p><p class="hint">Der Computer würde ${q===buyer?"kaufen":"verkaufen"} ${target}.</p>`, buttons:[{t:"OK"}]});
+  }
+  modal({title:`${q.name}, nimmst du an?`, icon:"🤝", color:"#00838f",
+    body:`<p>Angebot von <b>${p.name}</b>:</p><p>${desc}</p><p class="hint">Bitte das Gerät an ${q.name} weitergeben.</p>`,
+    buttons:[{t:"Ablehnen", cls:"sec", fn:()=>log(`🤝 ${nm(q)} lehnt ein Angebot für ${a.name} ab.`)},
+      {t:"Annehmen", cls:"gold", fn:()=>{ if(buyer.cash<price) return; doTrade(seller, buyer, a, price); }}]});
+}
+function doTrade(seller, buyer, a, price){
+  buyer.cash -= price; seller.cash += price;
+  seller.assets = seller.assets.filter(x=>x!==a); buyer.assets.push(a);
+  st(seller).sells.push({r:S.round, name:a.name, gain:price - tradeEq(a)});
+  st(buyer).buys.push({r:S.round, name:a.name, eq:price, cf:a.cf});
+  a.down = price; a.nk = 0;   // neuer Einsatz des Käufers
+  log(`🤝 ${nm(seller)} verkauft ${a.name} für ${eur(price)} an ${nm(buyer)}${a.mortgage?` (Darlehen ${eur(a.mortgage)} übernommen)`:""}.`);
+  checkAll(); render();
 }
 
 // ---------- Finanzen ----------
@@ -1128,9 +1361,36 @@ function resultsModal(){
     else res = `Hamsterrad: ${Math.round(score(p)*100)} % des Ausbruch-Ziels`;
     return `<tr><td><b>${i+1}.</b></td><td><span class="tok" style="display:inline-block;background:${p.color};vertical-align:-2px"></span> ${nm(p)}</td><td>${res}</td></tr>`;
   }).join("");
+  const reviews = S.players.filter(p=>!p.ai).map(reviewHTML).join("");
   return {title:"Endergebnis", icon:"🏁", color:"#0f3d2e",
-    body:`<table class="results">${rows}</table><p class="hint" style="margin-top:10px">Gespielt: ${S.round} Runden.</p>`,
+    body:`<table class="results">${rows}</table><p class="hint" style="margin-top:10px">Gespielt: ${S.round} Runden.</p>${reviews?`<h3>📊 Rückblick</h3>${reviews}`:""}`,
     buttons:[{t:"Schließen", cls:"sec"},{t:"Neues Spiel", cls:"gold", fn:resetGame}]};
+}
+// Persönlicher Rückblick: beste/schlechteste Entscheidungen und Lektionen
+function reviewHTML(p){
+  const s = st(p), roe = b => b.eq>0 ? b.cf*12/b.eq : 0;
+  const buys = s.buys.filter(b=>b.eq>0), best = buys.reduce((a,b)=>!a||roe(b)>roe(a)?b:a, null), worst = buys.reduce((a,b)=>!a||roe(b)<roe(a)?b:a, null);
+  const bestSell = s.sells.reduce((a,b)=>!a||b.gain>a.gain?b:a, null);
+  const facts = [];
+  facts.push(["Käufe / Verkäufe", `${s.buys.length} / ${s.sells.length}`]);
+  if(best) facts.push(["Beste Investition", `${best.name} (Runde ${best.r}): ${pctN(roe(best))} p.a.`]);
+  if(worst && worst!==best) facts.push(["Schwächste Investition", `${worst.name} (Runde ${worst.r}): ${pctN(roe(worst))} p.a.`]);
+  if(bestSell) facts.push(["Bester Verkauf", `${bestSell.name}: ${bestSell.gain>=0?"+":""}${eur(bestSell.gain)} Gewinn`]);
+  if(s.stockGain) facts.push(["Aktien Gewinn/Verlust", `${s.stockGain>=0?"+":""}${eur(s.stockGain)}`]);
+  facts.push(["Konsum-Ausgaben", eur(s.konsum)]);
+  facts.push(["Bankzinsen gezahlt", eur(s.interest)]);
+  if(s.charity) facts.push(["Gespendet", eur(s.charity)]);
+  const lessons = [];
+  if(s.konsum > 5000) lessons.push(`Konsum hat dich <b>${eur(s.konsum)}</b> gekostet – Geld, das als Eigenkapital hätte arbeiten können.`);
+  if(s.interest > 3000) lessons.push(`Du hast <b>${eur(s.interest)}</b> Bankzinsen gezahlt. Teure Kredite schnell tilgen lohnt sich.`);
+  if(worst && roe(worst) < 0.05 && worst!==best) lessons.push(`„${worst.name}“ hat sich kaum gelohnt – vor dem Kauf immer die Rendite aufs Eigenkapital prüfen.`);
+  if(s.sells.some(x=>x.gain>0)) lessons.push(`Gute Verkäufe zur richtigen Zeit setzen Kapital für größere Geschäfte frei.`);
+  if(p.bankrupt) lessons.push(`Die Insolvenz kam durch negativen Cashflow – immer zuerst prüfen: Bringt es jeden Monat Geld oder kostet es Geld?`);
+  if(!lessons.length) lessons.push(`Solide gespielt – Cashflow vor Konsum, und die Zahlen im Blick behalten.`);
+  return `<details class="review" open><summary><span class="tok" style="display:inline-block;background:${p.color};vertical-align:-2px"></span> ${p.name} – ${PROFS[p.prof].n}</summary>
+    ${chartSVG(p.hist)}
+    <div class="facts">${facts.map(f=>`<span>${f[0]}</span><span>${f[1]}</span>`).join("")}</div>
+    <ul class="rep">${lessons.map(l=>`<li>${l}</li>`).join("")}</ul></details>`;
 }
 function showResults(){ modal(resultsModal()); }
 function endTurn(){
@@ -1138,7 +1398,7 @@ function endTurn(){
   const n = S.players.length;
   let i = S.cur;
   for(let guard=0; guard<n*4; guard++){
-    i = (i+1)%n; if(i===0){ S.round++; if(XP() && S.round % EX.inflEvery === 0) inflation(); }
+    i = (i+1)%n; if(i===0){ S.round++; recordHist(); if(XP() && S.round % EX.inflEvery === 0) inflation(); }
     const q = S.players[i];
     if(q.free||q.bankrupt) continue;
     if(q.skip>0){ q.skip--; log(`⏸️ ${nm(q)} setzt aus (noch ${q.skip}).`); continue; }
@@ -1174,6 +1434,13 @@ function rules(){
   <p>📉 <b>Inflation:</b> Alle ${EX.inflEvery} Runden steigen Lebenshaltungskosten (+2,5 %) stärker als Gehälter (+2 %); Mieten +2 %.</p>
   <p>💥 <b>Totalverluste:</b> Unternehmen können scheitern, Aktien durch Insolvenz wertlos werden.</p>
   <p>Ausbruch: Das passive Einkommen muss die Ausgaben <b>inklusive</b> Steuern, Rücklage und Versicherung decken.</p>
+  <h3>🔨 Auktionen &amp; 🤝 Handel</h3>
+  <p><b>Auktion:</b> Wer ein Geschäft nicht will, kann es versteigern (Computer tun das automatisch). Der Höchstbietende übernimmt es zu den Kartenbedingungen und zahlt sein Gebot an den Verkäufer.</p>
+  <p><b>Handel:</b> Im Finanzbogen kannst du während deines Zugs Vermögenswerte mit Mitspielern tauschen – gegen Bargeld, der Käufer übernimmt das Darlehen. Computer nennen dir bei Ablehnung ihre Preisvorstellung.</p>
+  <h3>🧭 Coach &amp; 📈 Rückblick</h3>
+  <p>Der Coach bewertet Angebote und schlägt im Finanzbogen den nächsten sinnvollen Schritt vor (abschaltbar beim Spielstart). Die Verlaufsgrafik zeigt, wann dein passives Einkommen die Ausgaben überholt; am Spielende gibt es einen persönlichen Rückblick.</p>
+  <h3>📲 Als App installieren</h3>
+  <p>Über den Knopf „Installieren“ oder das Browser-Menü („Zum Home-Bildschirm“) – danach im Vollbild und offline spielbar.</p>
   <h3>Computer-Gegner</h3>
   <p>🤖 Computer spielen automatisch: Sie kaufen Geschäfte mit guter Rendite, verkaufen bei guten Angeboten und tilgen teure Schulden. Ist kein Mensch mehr im Rennen, endet das Spiel.</p>
   <p class="hint">Der Spielstand wird automatisch im Browser gespeichert.</p>`, buttons:[{t:"Los geht's", cls:"gold"}]});
@@ -1185,6 +1452,29 @@ $("#btnNew").onclick = ()=>{
   if(!S || S.over) return resetGame();
   modal({title:"Neues Spiel?", body:"<p>Das aktuelle Spiel wird verworfen.</p>", buttons:[{t:"Abbrechen", cls:"sec"},{t:"Neu beginnen", cls:"red", fn:resetGame}]});
 };
+
+// ---------- Installierbare App (PWA) ----------
+let installEvt = null;
+const isStandalone = () => window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform==="MacIntel" && navigator.maxTouchPoints>1);
+try {
+  if("serviceWorker" in navigator && location.protocol==="https:" && !/claude\.ai|claudeusercontent/.test(location.host))
+    navigator.serviceWorker.register("sw.js").catch(()=>{});
+} catch(e) {}
+window.addEventListener("beforeinstallprompt", e=>{ e.preventDefault(); installEvt = e; if(!isStandalone()) $("#btnInstall").classList.remove("hidden"); });
+window.addEventListener("appinstalled", ()=>{ installEvt = null; $("#btnInstall").classList.add("hidden"); });
+function installHelp(){
+  if(installEvt){ installEvt.prompt(); installEvt.userChoice.finally(()=>{ installEvt=null; $("#btnInstall").classList.add("hidden"); }); return; }
+  modal({title:"Als App installieren", icon:"📲", body:`
+    <p>So landet Geldfluss als App auf deinem Startbildschirm – im Vollbild und auch <b>ohne Internet</b> spielbar:</p>
+    <div class="facts"><span>📱 iPhone / iPad (Safari)</span><span>Teilen ⬆️ → „Zum Home-Bildschirm“</span>
+    <span>🤖 Android (Chrome)</span><span>Menü ⋮ → „App installieren“</span>
+    <span>💻 PC (Chrome / Edge)</span><span>Install-Symbol in der Adressleiste</span></div>
+    <p class="hint">Offline funktioniert es über die Adresse mr1357369.github.io/geldfluss – nach dem ersten Öffnen mit Internet.</p>`,
+    buttons:[{t:"OK", cls:"gold"}]});
+}
+$("#btnInstall").onclick = installHelp;
+if(isIOS && !isStandalone() && location.protocol==="https:") $("#btnInstall").classList.remove("hidden");
 renderSetup();
 </script>
 </body>
