@@ -1,6 +1,6 @@
 // Geldfluss – Service Worker: macht das Spiel offline spielbar.
 // Bei jeder Spieländerung VERSION erhöhen, damit Geräte die neue Fassung laden.
-const VERSION = "geldfluss-v4";
+const VERSION = "geldfluss-v5";
 const FILES = ["./", "./index.html", "./manifest.webmanifest",
   "./icons/icon-192.png", "./icons/icon-512.png", "./icons/apple-touch-icon.png"];
 

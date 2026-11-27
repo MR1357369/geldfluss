@@ -101,6 +101,8 @@ table.results td{padding:7px 4px;vertical-align:top}
 .rc{background:#fdf3d8;border-left:4px solid var(--accent);border-radius:8px;padding:8px 10px;font-size:13.5px;margin:8px 0}
 ul.rep{margin:4px 0 8px;padding-left:18px;font-size:14px} ul.rep li{margin:4px 0}
 .facts + .facts{margin-top:6px}
+.wdchk{display:flex;gap:8px;align-items:flex-start;font-size:14px;margin-top:10px;cursor:pointer}
+.wdchk input{width:18px;height:18px;min-height:0;margin-top:2px;flex:none}
 .coach{background:#e8f1fb;border-left:4px solid #1565c0;border-radius:8px;padding:8px 10px;font-size:13.5px;margin:8px 0}
 .coach.good{background:#e8f5e9;border-color:#2e7d32} .coach.bad{background:#fdecea;border-color:#c62828}
 .chart{width:100%;height:auto;display:block;margin-top:6px} .chart text{font-size:9px;fill:#6b756f}
@@ -319,7 +321,14 @@ function exExtras(p){
 const netPassive = p => { const x = exExtras(p); return passive(p) - x.tax - x.res - x.ins; };
 function smallDeal(){ const c = smallDealBase(); return XP() ? expertize(c) : c; }
 function bigDeal(){ const c = bigDealBase(); return XP() ? expertize(c) : c; }
-function marketCard(){ return XP() ? exMarket() : marketBase(); }
+function marketCard(){
+  if(Math.random()<0.07){   // Börsenereignisse für den ETF-Weltindex
+    const d = pick([-0.3,-0.2,-0.12,0.1,0.15,0.2]);
+    return d<0 ? {kind:"event", ev:"etf", d, title:d<=-0.2?"Börsencrash!":"Kursrutsch an den Börsen", text:`Die Weltbörsen fallen um ${Math.round(-d*100)} %. Der ETF-Kurs sinkt entsprechend. Wer jetzt in Panik verkauft, macht Verluste endgültig – Sparplan-Anleger kaufen dagegen günstiger nach.`}
+               : {kind:"event", ev:"etf", d, title:"Börsenrally", text:`Die Weltbörsen steigen um ${Math.round(d*100)} %. Der ETF-Kurs zieht kräftig an. Solche Phasen gleichen frühere Crashs aus – wer dabeigeblieben ist, profitiert.`};
+  }
+  return XP() ? exMarket() : marketBase();
+}
 function exMarket(){
   const r = Math.random();
   if(r<0.22){ const f = pick([0.9,1,1.1,1.2,1.3,1.4]); return {kind:"offer", cat:"wohnung", title:"Käufer sucht Eigentumswohnung", text:`Eine Familie bietet das ${String(f).replace(".",",")}-fache des damaligen Kaufpreises für eine Eigentumswohnung.`, offer:a=>Math.round(a.price*f/1000)*1000}; }
@@ -569,6 +578,8 @@ function coachNext(p){
   else if(cashflow(p)<0) t = `⚠️ Dein Cashflow ist <b>negativ</b>. Verkaufe Verlustbringer oder tilge Schulden, sonst droht die Insolvenz.`;
   else if(p.cash < buffer) t = `Baue erst ein kleines <b>Polster</b> auf – sonst zwingen dich Konsum-Felder in teure Kredite.`;
   else if(bd && bd.k!=="wohnen") t = `Spare auf die Tilgung der <b>${bd.n}</b> (noch ${eur(bd.debt - p.cash)}) oder nutze ein Geschäft mit mehr als ${pctN(bd.y)} Rendite.`;
+  else if(!etfOf(p).rate && !etfOf(p).withdraw && cashflow(p) > 500) t = `Ein kleiner <b>ETF-Sparplan</b> (z. B. 100–250 € pro Zahltag) baut nebenbei verlässlich Vermögen auf – langsam, aber breit gestreut. Für große Geschäfte solltest du trotzdem Bargeld behalten.`;
+  else if(etfValue(p)>0 && !etfOf(p).withdraw && passive(p) + Math.round(etfValue(p)*ETF.wdRate/12) >= expenses(p)*S.goal) t = `Mit dem <b>4-%-Entnahmeplan</b> deines ETF-Depots würdest du jetzt ausbrechen!`;
   else t = `Halte Ausschau nach Geschäften mit ${XP()?"mindestens 5 % Netto":"über 12 %"}-Rendite aufs Eigenkapital.`;
   const gap = Math.max(0, expenses(p)*S.goal - passive(p));
   return coachBox(`${t}<br><span class="hint">Bis zum Ausbruch fehlen noch <b>${eur(gap)}</b> passives Einkommen pro Monat.</span>`);
@@ -593,7 +604,86 @@ function chartSVG(h){
   </svg><div class="clegend"><span><i style="background:#2e7d32"></i>Passives Einkommen</span><span><i style="background:#c62828"></i>Ausbruch-Ziel (Ausgaben)</span>${cross?`<span><i style="background:#d9a62e"></i>Ausbruch</span>`:""}</div>`;
 }
 const P = () => S.players[S.cur];
-const passive = p => p.assets.reduce((s,a)=>s+a.cf,0);
+const passive = p => p.assets.reduce((s,a)=>s+a.cf,0) + etfW(p);
+
+// ---------- ETF-Sparplan (Weltindex) ----------
+// ≈ 20 Runden = 1 Jahr: im Schnitt ~7 % Rendite p.a., ~11 % Grundschwankung p.a. plus Crash-/Rally-Ereignisse
+const ETF = {drift:0.0035, vol:0.024, wdRate:0.04, tax:0.25*0.7};
+function etfS(){ return S.etf || (S.etf = {price:100, hist:[100]}); }
+function etfOf(p){ return p.etf || (p.etf = {units:0, invested:0, rate:0, withdraw:false}); }
+const etfValue = p => p.etf ? Math.round(p.etf.units * etfS().price) : 0;
+const etfW = p => (p.etf && p.etf.withdraw && !p.fast) ? Math.round(etfValue(p)*ETF.wdRate/12) : 0;
+function gauss(){ let u=0,v=0; while(!u) u=Math.random(); while(!v) v=Math.random(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
+function etfTick(){
+  const e = etfS(); e.price = Math.max(5, e.price*(1 + ETF.drift + ETF.vol*gauss()));
+  e.hist.push(+e.price.toFixed(2)); if(e.hist.length>400) e.hist = e.hist.filter((x,i)=>i%2===0);
+}
+function etfBuy(p, amt){
+  const e = etfOf(p); if(amt<=0 || p.cash<amt) return false;
+  p.cash -= amt; e.units += amt/etfS().price; e.invested += amt; return true;
+}
+// Verkauf: Steuer im Experten-Modus auf den Gewinnanteil (25 % mit 30 % Teilfreistellung, vereinfacht)
+function etfSell(p, amt){
+  const e = etfOf(p), v = etfValue(p); if(v<=0) return 0;
+  amt = Math.min(amt, v); const share = amt/v, cost = e.invested*share, gain = amt - cost;
+  const tax = XP() && gain>0 ? Math.round(gain*ETF.tax) : 0;
+  e.units *= (1-share); e.invested -= cost; if(e.units < 1e-6){ e.units = 0; e.invested = 0; }
+  p.cash += amt - tax; st(p).etfGain = (st(p).etfGain||0) + gain;
+  return tax;
+}
+// Am Zahltag: Sparrate investieren bzw. Entnahme aus dem Depot verbuchen
+function etfPayday(p){
+  const e = p.etf; if(!e || p.fast) return;
+  if(e.withdraw){
+    const w = Math.round(etfValue(p)*ETF.wdRate/12) || 0; if(w<=0) return;
+    const v = etfValue(p), share = w/v; e.units *= (1-share); e.invested *= (1-share);   // Geld kam schon über den Cashflow
+  } else if(e.rate>0){
+    if(p.cash >= e.rate + 500){ etfBuy(p, e.rate); }
+    else log(`📈 ${nm(p)}: ETF-Sparrate ausgesetzt – zu wenig Bargeld.`);
+  }
+}
+function etfSection(p, isCur){
+  const e = etfOf(p), es = etfS(), v = etfValue(p), gain = v - Math.round(e.invested), ch = es.price/100 - 1;
+  const rates = [0,100,250,500,1000];
+  if(!rates.includes(e.rate)) rates.push(e.rate);
+  const wd = Math.round(v*ETF.wdRate/12);
+  return `<h3>📈 ETF-Sparplan (Weltindex)</h3>
+    <div class="row" style="justify-content:space-between;font-size:14px"><span>Kurs <b>${es.price.toFixed(2).replace(".",",")}</b> <span class="${ch>=0?"pos":"neg"}">(${ch>=0?"+":""}${pctN(ch)} seit Start)</span></span><span>Depot <b>${eur(v)}</b></span></div>
+    ${spark(es.hist)}
+    ${e.invested>0||v>0?`<div class="hint">Eingezahlt ${eur(Math.round(e.invested))} · <span class="${gain>=0?"pos":"neg"}">${gain>=0?"+":""}${eur(gain)}${e.invested>0?` (${gain>=0?"+":""}${pctN(gain/e.invested)})`:""}</span></div>`:""}
+    ${isCur?`<div class="row" style="margin-top:6px">
+        <label class="hint">Sparrate pro Zahltag
+          <select onchange="setEtfRate(this.value)" ${e.withdraw?"disabled":""}>${rates.map(r=>`<option value="${r}" ${r===e.rate?"selected":""}>${r?eur(r):"keine"}</option>`).join("")}</select></label>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <button class="sm" ${p.cash<1000?"disabled":""} onclick="etfBuyOnce(1000)">+1.000 €</button>
+        <button class="sm" ${p.cash<5000?"disabled":""} onclick="etfBuyOnce(5000)">+5.000 €</button>
+        <button class="sm sec" ${v<=0?"disabled":""} onclick="etfSellAll()">Verkaufen</button>
+      </div>
+      <label class="wdchk"><input type="checkbox" ${e.withdraw?"checked":""} ${v<=0&&!e.withdraw?"disabled":""} onchange="toggleWithdraw()"><span><b>4-%-Entnahmeplan</b><br><span class="hint">zählt als passives Einkommen (${eur(wd)}/Monat), die Sparrate ruht</span></span></label>`:
+      (e.rate?`<div class="hint">Sparrate: ${eur(e.rate)} pro Zahltag</div>`:"")+(e.withdraw?`<div class="hint">Entnahmeplan aktiv: ${eur(wd)}/Monat</div>`:"")}`;
+}
+function spark(h){
+  if(!h || h.length<2) return "";
+  const W=300, H=44, mx=Math.max(...h), mn=Math.min(...h);
+  const pts = h.map((v,i)=>`${(i/(h.length-1)*W).toFixed(1)},${(H-3-(v-mn)/Math.max(1,mx-mn)*(H-6)).toFixed(1)}`).join(" ");
+  return `<svg viewBox="0 0 ${W} ${H}" class="chart" style="height:44px"><polyline points="${pts}" fill="none" stroke="${h[h.length-1]>=h[0]?"#2e7d32":"#c62828"}" stroke-width="2"/></svg>`;
+}
+// Bedienung im Finanzbogen
+function setEtfRate(v){ const p = P(); etfOf(p).rate = +v; log(`📈 ${nm(p)} ${+v?`spart jetzt ${eur(+v)} pro Zahltag in den ETF`:"stoppt den ETF-Sparplan"}.`); render(); }
+function etfBuyOnce(amt){ const p = P(); if(etfBuy(p, amt)){ log(`📈 ${nm(p)} kauft ETF-Anteile für ${eur(amt)} (Kurs ${etfS().price.toFixed(2).replace(".",",")}).`); render(); } }
+function etfSellAll(){
+  const p = P(), v = etfValue(p); if(v<=0) return;
+  modal({title:"ETF-Depot verkaufen?", icon:"📈", color:"#1565c0",
+    body:`<p>Depotwert: <b>${eur(v)}</b> (eingezahlt ${eur(Math.round(etfOf(p).invested))}).</p>${XP()?`<p class="hint">Auf den Gewinn fällt Abgeltungsteuer an (vereinfacht 17,5 % nach Teilfreistellung).</p>`:""}
+      ${coachBox(etfS().price < Math.max(...etfS().hist)*0.85 ? "Die Kurse sind gerade deutlich gefallen. Wer jetzt verkauft, macht Buchverluste endgültig – langfristige Anleger halten durch." : "ETFs entfalten ihre Stärke über viele Jahre. Verkaufe nur, wenn du das Geld für ein deutlich besseres Geschäft brauchst.")}`,
+    buttons:[{t:"Abbrechen", cls:"sec"},{t:"Alles verkaufen", cls:"red", fn:()=>{ const tax = etfSell(p, v); log(`📈 ${nm(p)} verkauft das ETF-Depot für ${eur(v)}${tax?` (${eur(tax)} Steuer)`:""}.`); checkAll(); render(); }}]});
+}
+function toggleWithdraw(){
+  const p = P(), e = etfOf(p); e.withdraw = !e.withdraw; if(e.withdraw) e.rate = 0;
+  log(e.withdraw ? `📈 ${nm(p)} startet den 4-%-Entnahmeplan: ${eur(etfW(p))} pro Monat.` : `📈 ${nm(p)} beendet den Entnahmeplan.`);
+  checkAll(); render();
+}
 const loanPay = p => Math.round(p.loan/100); // 1 % pro Monat
 const loanCap = p => PROFS[p.prof].salary*10;  // freiwilliger Kreditrahmen
 // Grundwerte inkl. Inflation (nur im Experten-Modus ≠ 1)
@@ -697,7 +787,7 @@ function startGame(){
        dreamFields: buildDreamFields(players), winners:[], expert: $("#diff").value==="x", rate: EX.rateStart, report:[]};
   players.forEach(p=>log(`${nm(p)} startet als ${PROFS[p.prof].n} mit ${eur(p.cash)} – Traum: ${dreamOf(p).i} ${dreamOf(p).n}.`));
   if(S.expert) log(`🎓 Experten-Modus: Marktzins ${pct(S.rate)}, Kaufnebenkosten 10 %, Steuern, Leerstand, Inflation & Co. sind aktiv.`);
-  S.coach = $("#coach").checked; recordHist();
+  S.coach = $("#coach").checked; etfS(); recordHist();
   view = 0; showGame();
 }
 function showGame(){ $("#setup").classList.add("hidden"); $("#game").classList.remove("hidden"); $("#mnav").classList.remove("hidden"); setView("board"); render(); }
@@ -820,10 +910,11 @@ function renderSheet(){
     ${isCur && tradePartners(p).length ? `<div class="row" style="margin-top:8px"><button class="sm" onclick="openTrade()">🤝 Mit Mitspielern handeln</button></div>` : ""}
     <h3>Einnahmen</h3>
     <table><tr><td>Gehalt</td><td class="r">${eur(b.salary)}</td></tr>
-      <tr><td>Passives Einkommen</td><td class="r">${eur(pas)}</td></tr>
+      <tr><td>Passives Einkommen${etfW(p)?` <span class="hint">(davon ETF-Entnahme ${eur(etfW(p))})</span>`:""}</td><td class="r">${eur(pas)}</td></tr>
       <tr class="tot"><td>Gesamt</td><td class="r">${eur(income(p))}</td></tr></table>
     <h3>Ausgaben</h3>
     <table>${expRows}<tr class="tot"><td>Gesamt</td><td class="r">${eur(exp)}</td></tr></table>
+    ${etfSection(p, isCur)}
     <h3>Vermögenswerte</h3>
     <table>${assetRows||'<tr><td class="hint">Noch keine – nutze Gelegenheiten!</td></tr>'}</table>
     <h3>Verbindlichkeiten</h3>
@@ -871,6 +962,10 @@ function aiManage(p){
   }
   while(p.loan>=1000 && p.cash >= (XP()?4000:9000)){ p.loan-=1000; p.cash-=1000; }
   if(XP() && !p.insured && p.assets.filter(isProp).length>=2){ p.insured = true; log(`🛡️ ${nm(p)} schließt eine Versicherung ab.`); }
+  // ETF: kleiner Sparplan, sobald keine Konsumschulden mehr; Entnahmeplan, wenn er den Ausbruch bringt
+  const e = etfOf(p);
+  if(!e.rate && !e.withdraw && cashflow(p) > 1000 && !["karte","auto"].some(k=>p.debts[k].debt>0)){ e.rate = 100; log(`📈 ${nm(p)} startet einen ETF-Sparplan (100 € pro Zahltag).`); }
+  if(!e.withdraw && etfValue(p)>0 && passive(p) + Math.round(etfValue(p)*ETF.wdRate/12) >= expenses(p)*S.goal){ e.withdraw = true; e.rate = 0; log(`📈 ${nm(p)} startet den 4-%-Entnahmeplan.`); checkAll(); }
 }
 function aiWantsAsset(p,c){
   if(c.cf<=0 || c.cf*12/c.down < 0.12) return false;
@@ -912,11 +1007,13 @@ function payday(p){
   if(cf>=0){ p.cash += cf; log(`💶 Zahltag für ${nm(p)}: +${eur(cf)}.`); }
   else if(p.cash >= -cf){ p.cash += cf; log(`⚠️ Zahltag für ${nm(p)}: ${eur(cf)} (negativer Cashflow).`); }
   else { liquidate(p, -cf); if(p.bankrupt) return; }
+  etfPayday(p);
   if(XP() && !p.fast) exPayday(p);
 }
 function fastPayday(p){ p.cash += p.fast.fc; log(`💰 Geldfluss-Tag für ${nm(p)}: +${eur(p.fast.fc)}.`); }
 function liquidate(p, need){
   log(`🚨 ${nm(p)} kann den negativen Cashflow nicht decken – Notverkauf zum halben Wert.`);
+  if(etfValue(p)>0 && p.cash<need){ const v = etfValue(p); etfSell(p, v); etfOf(p).withdraw = false; log(`📈 ${nm(p)} muss das ETF-Depot (${eur(v)}) verkaufen.`); }
   for(const a of [...p.assets]){
     if(p.cash>=need) break;
     p.cash += Math.max(0, Math.round(a.price*0.5) - a.mortgage);
@@ -1023,6 +1120,7 @@ function resolveFast(p){
 }
 function enterFast(p){
   const fc = Math.max(1000, netPassive(p))*FAST_MULT;
+  if(etfValue(p)>0){ const v = etfValue(p), tax = etfSell(p, v); etfOf(p).withdraw = false; etfOf(p).rate = 0; log(`📈 ${nm(p)} löst das ETF-Depot auf: ${eur(v - tax)} fließen ins Startkapital.`); }
   p.fast = {fc, fcStart:fc, pos:0, invests:[], dreamBought:false};
   p.cash += fc; p.charity = 0; p.skip = 0;
   log(`🚀 ${nm(p)} ist aus dem Hamsterrad ausgebrochen und wechselt auf die Freiheitsbahn (Freiheits-Cashflow ${eur(fc)}).`);
@@ -1153,6 +1251,10 @@ function applyEvent(c,p){
   if(c.ev==="miete"){ S.players.forEach(q=>q.assets.forEach(a=>{ if(a.cat==="wohnung") a.cf+=50; })); log("📈 Mietspiegel steigt: Eigentumswohnungen +50 €/Monat."); }
   if(c.ev==="heizung"){ if(p.assets.some(a=>a.cat==="haus")){ pay(p,2500,"Heizungsschaden"); log(`🔧 ${nm(p)} zahlt 2.500 € für die Heizung.`); } else c.text += " – Du besitzt keins, Glück gehabt!"; }
   if(c.ev==="split"){ S.players.forEach(q=>{ if(q.stocks[c.ticker]){ q.stocks[c.ticker].qty*=2; } }); log(`📈 Aktiensplit ${c.ticker} 2:1.`); }
+  if(c.ev==="etf"){ const e = etfS(); e.price = Math.max(5, e.price*(1+c.d)); e.hist.push(+e.price.toFixed(2));
+    log(`📈 ${c.title}: ETF-Kurs jetzt ${e.price.toFixed(2).replace(".",",")} (${c.d>0?"+":""}${Math.round(c.d*100)} %).`);
+    const mine = !p.ai && etfValue(p)>0 ? ` Dein Depot ist jetzt ${eur(etfValue(p))} wert.` : "";
+    c.text += mine; }
   if(c.ev==="zins"){
     const old = S.rate; S.rate = Math.min(EX.rateMax, Math.max(EX.rateMin, Math.round((S.rate+c.d)*10000)/10000));
     c.text += ` Marktzins jetzt: <b>${pct(S.rate)}</b> (vorher ${pct(old)}).`;
@@ -1377,6 +1479,8 @@ function reviewHTML(p){
   if(worst && worst!==best) facts.push(["Schwächste Investition", `${worst.name} (Runde ${worst.r}): ${pctN(roe(worst))} p.a.`]);
   if(bestSell) facts.push(["Bester Verkauf", `${bestSell.name}: ${bestSell.gain>=0?"+":""}${eur(bestSell.gain)} Gewinn`]);
   if(s.stockGain) facts.push(["Aktien Gewinn/Verlust", `${s.stockGain>=0?"+":""}${eur(s.stockGain)}`]);
+  const ev = etfValue(p), ei = Math.round(etfOf(p).invested);
+  if(ei>0 || s.etfGain) facts.push(["ETF-Depot", `${eur(ev)} Wert bei ${eur(ei)} eingezahlt${s.etfGain?` · realisiert ${s.etfGain>=0?"+":""}${eur(Math.round(s.etfGain))}`:""}`]);
   facts.push(["Konsum-Ausgaben", eur(s.konsum)]);
   facts.push(["Bankzinsen gezahlt", eur(s.interest)]);
   if(s.charity) facts.push(["Gespendet", eur(s.charity)]);
@@ -1385,6 +1489,8 @@ function reviewHTML(p){
   if(s.interest > 3000) lessons.push(`Du hast <b>${eur(s.interest)}</b> Bankzinsen gezahlt. Teure Kredite schnell tilgen lohnt sich.`);
   if(worst && roe(worst) < 0.05 && worst!==best) lessons.push(`„${worst.name}“ hat sich kaum gelohnt – vor dem Kauf immer die Rendite aufs Eigenkapital prüfen.`);
   if(s.sells.some(x=>x.gain>0)) lessons.push(`Gute Verkäufe zur richtigen Zeit setzen Kapital für größere Geschäfte frei.`);
+  if(ei>0 && ev>ei) lessons.push(`Dein ETF-Sparplan hat aus ${eur(ei)} ${eur(ev)} gemacht – Zeit im Markt und regelmäßiges Sparen wirken auch ohne Glück.`);
+  if(ei>0 && ev<ei) lessons.push(`Dein ETF lag am Ende im Minus – kurzfristig schwanken Börsen stark. ETFs brauchen viele Jahre Geduld.`);
   if(p.bankrupt) lessons.push(`Die Insolvenz kam durch negativen Cashflow – immer zuerst prüfen: Bringt es jeden Monat Geld oder kostet es Geld?`);
   if(!lessons.length) lessons.push(`Solide gespielt – Cashflow vor Konsum, und die Zahlen im Blick behalten.`);
   return `<details class="review" open><summary><span class="tok" style="display:inline-block;background:${p.color};vertical-align:-2px"></span> ${p.name} – ${PROFS[p.prof].n}</summary>
@@ -1398,7 +1504,7 @@ function endTurn(){
   const n = S.players.length;
   let i = S.cur;
   for(let guard=0; guard<n*4; guard++){
-    i = (i+1)%n; if(i===0){ S.round++; recordHist(); if(XP() && S.round % EX.inflEvery === 0) inflation(); }
+    i = (i+1)%n; if(i===0){ S.round++; etfTick(); recordHist(); if(XP() && S.round % EX.inflEvery === 0) inflation(); }
     const q = S.players[i];
     if(q.free||q.bankrupt) continue;
     if(q.skip>0){ q.skip--; log(`⏸️ ${nm(q)} setzt aus (noch ${q.skip}).`); continue; }
@@ -1434,6 +1540,8 @@ function rules(){
   <p>📉 <b>Inflation:</b> Alle ${EX.inflEvery} Runden steigen Lebenshaltungskosten (+2,5 %) stärker als Gehälter (+2 %); Mieten +2 %.</p>
   <p>💥 <b>Totalverluste:</b> Unternehmen können scheitern, Aktien durch Insolvenz wertlos werden.</p>
   <p>Ausbruch: Das passive Einkommen muss die Ausgaben <b>inklusive</b> Steuern, Rücklage und Versicherung decken.</p>
+  <h3>📈 ETF-Sparplan</h3>
+  <p>Im Finanzbogen kannst du in einen breit gestreuten <b>Welt-ETF</b> investieren: per <b>Sparrate</b> an jedem Zahltag oder als Einmalkauf. Der Kurs steigt im Schnitt um rund 7 % pro Spieljahr (≈ 20 Runden), schwankt aber deutlich; Börsencrashs und Rallys kommen über das Markt-Feld. ETFs bringen keinen laufenden Cashflow – mit dem <b>4-%-Entnahmeplan</b> entnimmst du jedes Jahr 4 % des Depotwerts, und das zählt als passives Einkommen. Im Experten-Modus fällt beim Verkauf Abgeltungsteuer an (vereinfacht 17,5 % auf den Gewinn). Beim Wechsel auf die Freiheitsbahn wird das Depot zu Startkapital.</p>
   <h3>🔨 Auktionen &amp; 🤝 Handel</h3>
   <p><b>Auktion:</b> Wer ein Geschäft nicht will, kann es versteigern (Computer tun das automatisch). Der Höchstbietende übernimmt es zu den Kartenbedingungen und zahlt sein Gebot an den Verkäufer.</p>
   <p><b>Handel:</b> Im Finanzbogen kannst du während deines Zugs Vermögenswerte mit Mitspielern tauschen – gegen Bargeld, der Käufer übernimmt das Darlehen. Computer nennen dir bei Ablehnung ihre Preisvorstellung.</p>
