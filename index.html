@@ -12,6 +12,9 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230f3d2e'/%3E%3Ctext x='50' y='70' font-size='60' text-anchor='middle'%3E%F0%9F%92%B6%3C/text%3E%3C/svg%3E">
 <title>Geldfluss – Raus aus dem Hamsterrad</title>
+<meta name="author" content="Marcus Rapsch">
+<meta name="copyright" content="© 2026 Marcus Rapsch. Alle Rechte vorbehalten.">
+<!-- Geldfluss – Raus aus dem Hamsterrad · © 2026 Marcus Rapsch. Alle Rechte vorbehalten. -->
 <style>
 :root{
   --bg:#f4f1ea; --panel:#fffdf8; --ink:#1d2a24; --muted:#6b756f; --line:#e3ddd0;
@@ -101,6 +104,7 @@ table.results td{padding:7px 4px;vertical-align:top}
 .rc{background:#fdf3d8;border-left:4px solid var(--accent);border-radius:8px;padding:8px 10px;font-size:13.5px;margin:8px 0}
 ul.rep{margin:4px 0 8px;padding-left:18px;font-size:14px} ul.rep li{margin:4px 0}
 .facts + .facts{margin-top:6px}
+.copy{text-align:center;font-size:12px;color:var(--muted);margin:12px 0 0}
 .wdchk{display:flex;gap:8px;align-items:flex-start;font-size:14px;margin-top:10px;cursor:pointer}
 .wdchk input{width:18px;height:18px;min-height:0;margin-top:2px;flex:none}
 .coach{background:#e8f1fb;border-left:4px solid #1565c0;border-radius:8px;padding:8px 10px;font-size:13.5px;margin:8px 0}
@@ -179,6 +183,7 @@ header{padding-top:calc(10px + env(safe-area-inset-top));padding-left:calc(16px 
   <div id="colBoard">
     <div class="board" id="board"></div>
     <div class="legend" id="legend"></div>
+    <p class="copy">© 2026 Marcus Rapsch · Alle Rechte vorbehalten.</p>
   </div>
   <div id="colSide">
     <div class="panel" id="sheet"></div>
@@ -758,7 +763,8 @@ function renderSetup(){
       ${saved?'<button class="sec" id="btnCont">Gespeichertes Spiel fortsetzen</button>':""}
       <button class="gold" id="btnStart">Spiel starten</button>
     </div>
-    <p class="hint" style="margin:14px 0 0;text-align:right">📲 <a href="#" onclick="installHelp();return false">Als App installieren</a> – im Vollbild und offline spielen</p></div>`;
+    <p class="hint" style="margin:14px 0 0;text-align:right">📲 <a href="#" onclick="installHelp();return false">Als App installieren</a> – im Vollbild und offline spielen</p></div>
+    <p class="copy">© 2026 Marcus Rapsch · Geldfluss – Raus aus dem Hamsterrad · Alle Rechte vorbehalten.</p>`;
   $("#btnStart").onclick = startGame;
   const dh = ()=>{ $("#diffHint").textContent = $("#diff").value==="x"
     ? "Für Fortgeschrittene: realistische Renditen, 10 % Kaufnebenkosten, Steuern auf Erträge, Instandhaltungsrücklage, Leerstand & Reparaturen, Zinsbindung mit Zinsänderungen, Inflation und echte Totalverluste. Dauert deutlich länger."
@@ -1551,7 +1557,8 @@ function rules(){
   <p>Über den Knopf „Installieren“ oder das Browser-Menü („Zum Home-Bildschirm“) – danach im Vollbild und offline spielbar.</p>
   <h3>Computer-Gegner</h3>
   <p>🤖 Computer spielen automatisch: Sie kaufen Geschäfte mit guter Rendite, verkaufen bei guten Angeboten und tilgen teure Schulden. Ist kein Mensch mehr im Rennen, endet das Spiel.</p>
-  <p class="hint">Der Spielstand wird automatisch im Browser gespeichert.</p>`, buttons:[{t:"Los geht's", cls:"gold"}]});
+  <p class="hint">Der Spielstand wird automatisch im Browser gespeichert.</p>
+  <p class="copy" style="margin-top:14px">© 2026 Marcus Rapsch · Alle Rechte vorbehalten.<br>Geldfluss ist ein eigenständiges Lernspiel und keine Anlageberatung.</p>`, buttons:[{t:"Los geht's", cls:"gold"}]});
 }
 
 $("#btnRules").onclick = rules;
